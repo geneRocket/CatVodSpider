@@ -11,8 +11,7 @@ rm -rf "$BASE_DIR/Smali_classes"
 java -jar "$BASE_DIR/3rd/apktool_2.11.0.jar" d -f --only-main-classes "$BASE_DIR/../app/build/outputs/apk/release/app-release-unsigned.apk" -o "$BASE_DIR/Smali_classes"
 
 # 清理旧的模块
-rm -rf "$BASE_DIR/spider.jar/smali/com/github/catvod/spider"
-rm -rf "$BASE_DIR/spider.jar/smali/com/github/catvod/js"
+rm -rf "$BASE_DIR/spider.jar/smali/com/github/catvod"
 rm -rf "$BASE_DIR/spider.jar/smali/org/slf4j"
 
 # 创建目录
@@ -20,8 +19,7 @@ mkdir -p "$BASE_DIR/spider.jar/smali/com/github/catvod"
 mkdir -p "$BASE_DIR/spider.jar/smali/org/slf4j"
 
 # 移动提取的 smali 文件
-mv "$BASE_DIR/Smali_classes/smali/com/github/catvod/spider" "$BASE_DIR/spider.jar/smali/com/github/catvod/"
-mv "$BASE_DIR/Smali_classes/smali/com/github/catvod/js" "$BASE_DIR/spider.jar/smali/com/github/catvod/"
+mv "$BASE_DIR/Smali_classes/smali/com/github/catvod" "$BASE_DIR/spider.jar/smali/com/github/"
 mv "$BASE_DIR/Smali_classes/smali/org/slf4j" "$BASE_DIR/spider.jar/smali/org/slf4j/"
 
 # 重新打包

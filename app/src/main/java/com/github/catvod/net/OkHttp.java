@@ -1,6 +1,7 @@
 package com.github.catvod.net;
 
 import android.annotation.SuppressLint;
+import android.util.Log;
 
 import com.github.catvod.crawler.Spider;
 
@@ -95,13 +96,18 @@ public class OkHttp {
     }
 
     private static OkHttpClient.Builder getBuilder() {
+        Log.i("OkHttp.getBuilder",ProxySelector.getDefault().toString());
         return new OkHttpClient.Builder().proxySelector(ProxySelector.getDefault()).dns(safeDns()).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS).hostnameVerifier((hostname, session) -> true).sslSocketFactory(getSSLContext().getSocketFactory(), trustAllCertificates());
     }
 
     private static OkHttpClient client() {
         try {
-            return Objects.requireNonNull(Spider.client());
+            OkHttpClient client1= Spider.client();
+            Log.e("从tvbox获取的OKclient",String.valueOf(client1));
+            return Objects.requireNonNull(client1);
         } catch (Throwable e) {
+            Log.e("从tvbox获取的OKclient失败","",e);
+            Log.d("从jar获取的OKclient","");
             return build();
         }
     }

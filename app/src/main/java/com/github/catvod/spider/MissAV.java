@@ -1,5 +1,7 @@
 package com.github.catvod.spider;
 
+import android.util.Log;
+
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
@@ -71,7 +73,6 @@ public class MissAV extends Spider {
     protected String fetch(String webUrl) {
         SpiderDebug.log(webUrl);
         String res = OkHttp.string(webUrl, getHeaders());
-        SpiderDebug.log(res);
         return res;
     }
 
@@ -102,6 +103,6 @@ public class MissAV extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        return Result.get().parse(1).url(id).header(getHeaders()).string();
+        return Result.get().parse().url(id).header(getHeaders()).string();
     }
 }
