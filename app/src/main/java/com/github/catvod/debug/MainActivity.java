@@ -7,14 +7,21 @@ import android.widget.Button;
 import com.github.catvod.R;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.spider.Init;
-import com.github.catvod.spider.MQiTV;
+import com.github.catvod.spider.MissAV;
 import com.github.catvod.spider.Proxy;
 import com.orhanobut.logger.AndroidLogAdapter;
 import com.orhanobut.logger.Logger;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -46,13 +53,28 @@ public class MainActivity extends Activity {
         proxy.setOnClickListener(view -> executor.execute(this::proxy));
         Logger.addLogAdapter(new AndroidLogAdapter());
         executor = Executors.newCachedThreadPool();
+        ProxySelector.setDefault(new ProxySelector() {
+            @Override
+            public List<java.net.Proxy> select(URI uri) {
+                if(uri.getHost().contains("missav")){
+                    return Collections.singletonList(new java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress.createUnresolved("192.168.10.200", 52262)));
+
+                }
+                return Collections.singletonList( java.net.Proxy.NO_PROXY);
+            }
+
+            @Override
+            public void connectFailed(URI uri, SocketAddress socketAddress, IOException e) {
+
+            }
+        });
         executor.execute(this::initSpider);
     }
 
     private void initSpider() {
         try {
             Init.init(getApplicationContext());
-            spider = new MQiTV();
+            spider = new MissAV();
             spider.init(this, "");
         } catch (Throwable e) {
             e.printStackTrace();
@@ -80,7 +102,7 @@ public class MainActivity extends Activity {
             HashMap<String, String> extend = new HashMap<>();
             extend.put("c", "19");
             extend.put("year", "2024");
-            Logger.t("categoryContent").d(spider.categoryContent("3", "2", true, extend));
+            Logger.t("categoryContent").d(spider.categoryContent("release", "2", true, extend));
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -88,7 +110,7 @@ public class MainActivity extends Activity {
 
     public void detailContent() {
         try {
-            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("78702")));
+            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("https://missav.ws/cn/waaa-523")));
         } catch (Throwable e) {
             e.printStackTrace();
         }

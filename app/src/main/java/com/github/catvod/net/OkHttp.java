@@ -5,6 +5,7 @@ import android.annotation.SuppressLint;
 import com.github.catvod.crawler.Spider;
 
 import java.io.IOException;
+import java.net.ProxySelector;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.List;
@@ -94,7 +95,7 @@ public class OkHttp {
     }
 
     private static OkHttpClient.Builder getBuilder() {
-        return new OkHttpClient.Builder().dns(safeDns()).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS).hostnameVerifier((hostname, session) -> true).sslSocketFactory(getSSLContext().getSocketFactory(), trustAllCertificates());
+        return new OkHttpClient.Builder().proxySelector(ProxySelector.getDefault()).dns(safeDns()).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS).hostnameVerifier((hostname, session) -> true).sslSocketFactory(getSSLContext().getSocketFactory(), trustAllCertificates());
     }
 
     private static OkHttpClient client() {
