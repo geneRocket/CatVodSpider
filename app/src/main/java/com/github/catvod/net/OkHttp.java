@@ -100,14 +100,14 @@ public class OkHttp {
         return new OkHttpClient.Builder().proxySelector(ProxySelector.getDefault()).dns(safeDns()).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS).hostnameVerifier((hostname, session) -> true).sslSocketFactory(getSSLContext().getSocketFactory(), trustAllCertificates());
     }
 
-    private static OkHttpClient client() {
+    public static OkHttpClient client() {
         try {
             OkHttpClient client1= Spider.client();
-            Log.e("从tvbox获取的OKclient",String.valueOf(client1));
+//            Log.e("从tvbox获取的OKclient",String.valueOf(client1));
             return Objects.requireNonNull(client1);
         } catch (Throwable e) {
-            Log.e("从tvbox获取的OKclient失败","",e);
-            Log.d("从jar获取的OKclient","");
+//            Log.e("从tvbox获取的OKclient失败","");
+//            Log.d("从jar获取的OKclient","");
             return build();
         }
     }

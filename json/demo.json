@@ -9,7 +9,7 @@
       "name": "MissAV",
       "type": 3,
       "api": "csp_MissAV",
-      "searchable": 0,
+      "searchable": 1,
       "changeable": 0
     }
   ],
