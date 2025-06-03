@@ -18,12 +18,12 @@ android {
         release {
             minifyEnabled true
             proguardFiles 'proguard-rules.pro'
-            proguardDictionaries {
-                dictionaryNames = ["build/class-dictionary", "build/package-dictionary", "build/obfuscation-dictionary"]
-                minLineLength 1
-                maxLineLength 3
-                linesCountInDictionary 100000
-            }
+//            proguardDictionaries {
+//                dictionaryNames = ["build/class-dictionary", "build/package-dictionary", "build/obfuscation-dictionary"]
+//                minLineLength 1
+//                maxLineLength 3
+//                linesCountInDictionary 100000
+//            }
         }
     }
 

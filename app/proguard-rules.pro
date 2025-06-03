@@ -11,6 +11,7 @@
 
 # AndroidX
 -keep class androidx.core.** { *; }
+-keep class android.webkit.** { *; }
 
 # Spider
 -keep class com.github.catvod.crawler.* { *; }
@@ -36,3 +37,14 @@
 
 # Logger
 -keep class com.orhanobut.logger.** { *; }
+
+-keep class org.seimicrawler.** { *; }
+
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+-keepclassmembers class * extends java.lang.Enum {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}

@@ -19,8 +19,8 @@ mkdir -p "$BASE_DIR/spider.jar/smali/com/github/catvod"
 mkdir -p "$BASE_DIR/spider.jar/smali/org/slf4j"
 
 # 移动提取的 smali 文件
-mv "$BASE_DIR/Smali_classes/smali/com/github/catvod" "$BASE_DIR/spider.jar/smali/com/github/"
-mv "$BASE_DIR/Smali_classes/smali/org/slf4j" "$BASE_DIR/spider.jar/smali/org/slf4j/"
+mv "$BASE_DIR/Smali_classes/smali" "$BASE_DIR/spider.jar/smali"
+#mv "$BASE_DIR/Smali_classes/smali/org" "$BASE_DIR/spider.jar/smali/"
 
 # 重新打包
 java -jar "$BASE_DIR/3rd/apktool_2.11.0.jar" b "$BASE_DIR/spider.jar" -c
@@ -36,4 +36,3 @@ rm -rf "$BASE_DIR/spider.jar/build"
 rm -rf "$BASE_DIR/spider.jar/smali"
 rm -rf "$BASE_DIR/spider.jar/dist"
 rm -rf "$BASE_DIR/Smali_classes"
-

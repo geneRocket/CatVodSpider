@@ -20,22 +20,23 @@ import org.apache.commons.lang3.StringEscapeUtils;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
-public class WebViewSpider  {
+public class WebViewSpider {
 
     Context context;
     WebView webView;
     CountDownLatch latch;
     String htmlSource;
 
+    Handler mainHandler;
 
-    public  WebViewSpider(Context context) {
-        this.context=context;
+
+    public WebViewSpider(Context context) {
+        this.context = context;
     }
 
     public void createInitWebView(Context context) {
@@ -57,7 +58,7 @@ public class WebViewSpider  {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
 
-        webView.setWebViewClient(new WebViewClient(){
+        webView.setWebViewClient(new WebViewClient() {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -90,7 +91,7 @@ public class WebViewSpider  {
 
                     return new WebResourceResponse(mimeType, encoding, inputStream);
                 } catch (Exception e) {
-                    Log.e("aaa","aaa",e);
+                    Log.e("webview", "shouldInterceptRequest error", e);
                     return null;
                 }
             }
@@ -114,7 +115,7 @@ public class WebViewSpider  {
             }
 
 
-             @Override
+            @Override
             @SuppressLint("WebViewClientOnReceivedSslError")
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.proceed();
@@ -129,20 +130,20 @@ public class WebViewSpider  {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
 
-                webView.evaluateJavascript(
-                        "(function() { return document.documentElement.outerHTML; })();",
-                        html -> {
-                            String htmlContent = html != null ? html.replaceAll("^\"|\"$", "")
-                                    .replaceAll("\\\\n", "\n")
-                                    .replaceAll("\\\\\"", "\"") : "";
 
-                            Log.d("HTML_CONTENT", htmlContent);
+                mainHandler.postDelayed(() -> {
+                    if (webView != null) {
+                        webView.evaluateJavascript(
+                                "(function() { return document.documentElement.outerHTML; })();",
+                                html -> {
 
-                            htmlSource=  StringEscapeUtils.unescapeJava(htmlContent) ;
-                            latch.countDown();
-
-                        }
-                );
+                                    htmlSource = StringEscapeUtils.unescapeEcmaScript(html);
+                                    htmlSource = htmlSource.substring(1, htmlSource.length() - 1);
+                                    latch.countDown();
+                                }
+                        );
+                    }
+                }, 5000);
 
             }
         });
@@ -150,22 +151,24 @@ public class WebViewSpider  {
     }
 
 
-    public String getHtmlSource(String webUrl,Map<String,String> header) throws Exception {
+    public String getHtmlSource(String webUrl, Map<String, String> header) throws Exception {
 
-        Handler mainHandler = new Handler(Looper.getMainLooper());
-         latch = new CountDownLatch(1);
+        mainHandler = new Handler(Looper.getMainLooper());
+        latch = new CountDownLatch(1);
         mainHandler.post(() -> {
             createInitWebView(context);
-            // 加载目标网页
-            webView.loadUrl(webUrl,header);
+            webView.loadUrl(webUrl, header);
         });
-        latch.await(60, TimeUnit.SECONDS);
+        // 加载目标网页
+        latch.await();
 
-        WebView webViewSnap=webView;
-        mainHandler.post(()->{
-                webViewSnap.destroy();
+        CountDownLatch closeLatch = new CountDownLatch(1);
+        mainHandler.post(() -> {
+            webView.destroy();
+            closeLatch.countDown();
         });
-        webView = null;
+        closeLatch.await();
+
         return htmlSource;
     }
 }

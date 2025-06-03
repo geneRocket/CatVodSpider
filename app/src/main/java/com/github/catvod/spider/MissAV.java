@@ -1,6 +1,7 @@
 package com.github.catvod.spider;
 
 import android.content.Context;
+import android.util.Log;
 
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
@@ -8,11 +9,8 @@ import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
+import com.google.gson.Gson;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.seimicrawler.xpath.JXDocument;
 import org.seimicrawler.xpath.JXNode;
 
@@ -31,7 +29,7 @@ public class MissAV extends Spider {
 
     @Override
     public void init(Context context) throws Exception {
-        this.webViewSpider=new WebViewSpider(context);
+        this.webViewSpider = new WebViewSpider(context);
     }
 
     private HashMap<String, String> getHeaders() {
@@ -59,10 +57,10 @@ public class MissAV extends Spider {
         List<Class> classes = new ArrayList<>();
         classes.add(new Class("https://missav.ws/dm588/cn/release", "新作上市"));
         classes.add(new Class("https://missav.ws/dm257/cn/monthly-hot", "本月热门"));
-        for(int i=1;i<=3;i++){
-            JXDocument doc = JXDocument.create(fetch("https://missav.ws/cn/genres?page="+i));
+        for (int i = 1; i <= 3; i++) {
+            JXDocument doc = JXDocument.create(fetch("https://missav.ws/cn/genres?page=" + i));
             List<JXNode> vodNodes = doc.selN("//div[1]/div[3]/div[1]/div/div[*]/a");
-            for (JXNode vodNode:vodNodes) {
+            for (JXNode vodNode : vodNodes) {
                 String url = vodNode.selOne(".//@href").asString().trim();
                 String name = vodNode.asElement().text();
                 classes.add(new Class(url, name));
@@ -73,12 +71,12 @@ public class MissAV extends Spider {
 
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
-        String webUrl=tid+"?page="+pg;
+        String webUrl = tid + "?page=" + pg;
         JXDocument doc = JXDocument.create(fetch(webUrl));
         List<Vod> list = new ArrayList<>();
         List<JXNode> vodNodes = doc.selN("//div[1]/div[3]/div[2]/div[*]/div");
         for (int i = 0; i < vodNodes.size(); i++) {
-            JXNode vodNode= vodNodes.get(i);
+            JXNode vodNode = vodNodes.get(i);
             String url = vodNode.selOne(".//div[1]/a[1]/@href").asString().trim();
             String pic = vodNode.selOne(".//div[1]/a[1]/img/@data-src").asString().trim();
             String name = vodNode.selOne(".//div[1]/a[1]/img/@alt").asString().trim();
@@ -99,29 +97,29 @@ public class MissAV extends Spider {
         Vod vod = new Vod();
         vod.setVodId(ids.get(0));
         vod.setVodPlayFrom("MissAV");
-        vod.setVodPlayUrl( ids.get(0));
+        vod.setVodPlayUrl(ids.get(0));
         return Result.string(vod);
     }
 
     @Override
     public String searchContent(String key, boolean quick) throws Exception {
-        String webUrl = "https://missav.ws/cn/search/"+URLEncoder.encode(key, "UTF-8");
+        String webUrl = "https://missav.ws/cn/search/" + URLEncoder.encode(key, "UTF-8");
+        Log.d("开始搜索", webUrl);
+        String htmlSource = webViewSpider.getHtmlSource(webUrl, getHeaders());
 
-        String htmlSource=webViewSpider.getHtmlSource(webUrl,getHeaders());
-
-        Document doc = Jsoup.parse(htmlSource);
+        JXDocument doc = JXDocument.create(htmlSource);
         List<Vod> list = new ArrayList<>();
-        Elements vodNodes = doc.select("body > div:nth-child(2) > div.sm\\:container.mx-auto.px-4.content-without-search.pb-12 > div.grid.grid-cols-2.md\\:grid-cols-3.xl\\:grid-cols-4.gap-5 > div > div > div.relative.aspect-w-16.aspect-h-9.rounded.overflow-hidden.shadow-lg > a:nth-child(1) > img");
-        for (Element vodNode:vodNodes) {
-            String url = vodNode.parentNode().attr("href").trim();
-            String pic = vodNode.attr("data-src").trim();
-            String name = vodNode.attr("alt").trim();
+        List<JXNode> vodNodes = doc.selN("//div[@class='my-2 text-sm text-nord4 truncate']");
+        for (JXNode vodNode : vodNodes) {
+            String name = vodNode.selOne("./a/text()").asString();
+            String pic = vodNode.selOne("./../div[1]/a[1]/img/@data-src").asString();
+            String url = vodNode.selOne("./../div[1]/a[1]/@href").asString();
             list.add(new Vod(url, name, pic, ""));
         }
+        Log.d("结束搜索", new Gson().toJson(list));
 
         return Result.string(list);
     }
-
 
 
     @Override
