@@ -22,14 +22,12 @@ import java.util.List;
 public class MissAV extends Spider {
 
     private static final String siteUrl = "https://missav.ws";
-    private static final String searchUrl = siteUrl + "/cn/search";
 
-    WebViewSpider webViewSpider;
-
+    Context context;
 
     @Override
     public void init(Context context) throws Exception {
-        this.webViewSpider = new WebViewSpider(context);
+        this.context=context;
     }
 
     private HashMap<String, String> getHeaders() {
@@ -103,6 +101,8 @@ public class MissAV extends Spider {
 
     @Override
     public String searchContent(String key, boolean quick) throws Exception {
+        WebViewSpider webViewSpider = new WebViewSpider(context);
+
         String webUrl = "https://missav.ws/cn/search/" + URLEncoder.encode(key, "UTF-8");
         Log.d("开始搜索", webUrl);
         String htmlSource = webViewSpider.getHtmlSource(webUrl, getHeaders());
