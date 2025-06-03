@@ -46,7 +46,7 @@ public class WebViewSpider {
         WebSettings settings = webView.getSettings();
         settings.setSupportZoom(true);
         settings.setUseWideViewPort(true);
-        settings.setDatabaseEnabled(true);
+        settings.setDatabaseEnabled(false);
         settings.setBlockNetworkImage(true);
         settings.setDomStorageEnabled(true);
         settings.setJavaScriptEnabled(true);
@@ -143,7 +143,7 @@ public class WebViewSpider {
                                 }
                         );
                     }
-                }, 5000);
+                }, 3000);
 
             }
         });
