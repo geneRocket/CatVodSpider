@@ -103,13 +103,22 @@ public class MissAV extends Spider {
         vod.setVodYear(doc.selNOne("//span[text()='发行日期:']/../time[1]/text()") + "");
         String actor = doc.selNOne("//span[text()='女优:']/../a[1]/text()") + "";
         if (StringUtils.isNotBlank(actor)) {
-            vod.setVodActor("[a=cr:{\"scheme\":\"search\"}/]$token[/a]".replace("$token", actor));
+            String[] actorParts = actor.split("\\(");
+            String linkStr = "[a=cr:{\"scheme\":\"search\"}/]$token[/a]".replace("$token", actorParts[0]);
+            if (actorParts.length > 1) {
+                linkStr += '(';
+                for (int i = 1; i < actorParts.length; i++) {
+                    linkStr += actorParts[i];
+                }
+            }
+
+            vod.setVodActor(linkStr);
         }
         return Result.string(vod);
     }
 
     public String searchContent(String key, boolean quick) throws Exception {
-        return searchContent(key,quick,null);
+        return searchContent(key, quick, null);
     }
 
     @Override
