@@ -110,7 +110,7 @@ public class MainActivity extends Activity {
 
     public void detailContent() {
         try {
-            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("https://missav.ws/cn/waaa-523")));
+            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("https://missav.ws/cn/xvsr-819")));
         } catch (Throwable e) {
             e.printStackTrace();
         }
