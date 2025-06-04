@@ -17,6 +17,7 @@ import com.github.catvod.net.OkHttp;
 
 import org.apache.commons.lang3.StringEscapeUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -56,6 +57,8 @@ public class WebViewSpider {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        settings.setLoadsImagesAutomatically(false);
 
 
         webView.setWebViewClient(new WebViewClient() {
@@ -64,6 +67,10 @@ public class WebViewSpider {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 try {
+                    if (url.matches(".*\\.(css|woff|woff2|ttf|otf|eot|svg|mp4|webm|avi|gif)$")) {
+                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
+                    }
+
                     Request.Builder builder = new Request.Builder().url(url);
 
                     // 设置请求头
@@ -74,12 +81,12 @@ public class WebViewSpider {
                     Response response = OkHttp.client().newCall(builder.build()).execute();
 
                     if (!response.isSuccessful()) {
-                        return null;
+                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
                     ResponseBody body = response.body();
                     if (body == null) {
-                        return null;
+                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
                     // 获取Content-Type 和 encoding
@@ -92,7 +99,7 @@ public class WebViewSpider {
                     return new WebResourceResponse(mimeType, encoding, inputStream);
                 } catch (Exception e) {
                     Log.e("webview", "shouldInterceptRequest error", e);
-                    return null;
+                    return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                 }
             }
 
@@ -143,7 +150,7 @@ public class WebViewSpider {
                                 }
                         );
                     }
-                }, 3000);
+                }, 2000);
 
             }
         });
