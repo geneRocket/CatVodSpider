@@ -58,7 +58,7 @@ public class MissAV extends Spider {
             JXDocument doc = JXDocument.create(fetch("https://missav.ws/cn/genres?page=" + i));
             List<JXNode> vodNodes = doc.selN("//div[1]/div[3]/div[1]/div/div[*]/a");
             for (JXNode vodNode : vodNodes) {
-                String url = vodNode.selOne(".//@href").asString().trim();
+                String url = vodNode.selOne(".//@href") + "";
                 String name = vodNode.asElement().text();
                 classes.add(new Class(url, name));
             }
@@ -74,9 +74,9 @@ public class MissAV extends Spider {
         List<JXNode> vodNodes = doc.selN("//div[1]/div[3]/div[2]/div[*]/div");
         for (int i = 0; i < vodNodes.size(); i++) {
             JXNode vodNode = vodNodes.get(i);
-            String url = vodNode.selOne(".//div[1]/a[1]/@href").asString().trim();
-            String pic = vodNode.selOne(".//div[1]/a[1]/img/@data-src").asString().trim();
-            String name = vodNode.selOne(".//div[1]/a[1]/img/@alt").asString().trim();
+            String url = vodNode.selOne(".//div[1]/a[1]/@href") + "";
+            String pic = vodNode.selOne(".//div[1]/a[1]/img/@data-src") + "";
+            String name = vodNode.selOne(".//div[1]/a[1]/img/@alt") + "";
             list.add(new Vod(url, name, pic, ""));
         }
         return Result.string(list);
