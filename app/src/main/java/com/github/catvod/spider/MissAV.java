@@ -93,6 +93,7 @@ public class MissAV extends Spider {
         String webUrl = ids.get(0);
         Vod vod = new Vod();
         vod.setVodId(webUrl);
+        vod.setVodPlayFrom("MissAV");
         vod.setVodPlayUrl(webUrl);
         JXDocument doc = JXDocument.create(fetch(webUrl));
         String code = doc.selNOne("//span[text()='番号:']/../span[2]/text()") + "";
@@ -100,7 +101,10 @@ public class MissAV extends Spider {
         vod.setVodRemarks(code);
         vod.setVodContent(intro);
         vod.setVodYear(doc.selNOne("//span[text()='发行日期:']/../time[1]/text()") + "");
-        vod.setVodActor(doc.selNOne("//span[text()='女优:']/../a[1]/text()") + "");
+        String actor=doc.selNOne("//span[text()='女优:']/../a[1]/text()")+"";
+        if(StringUtils.isNotBlank(actor)){
+            vod.setVodActor("[a=cr:{\"scheme\":\"search\"}/]$token[/a]".replace("$token",  actor));
+        }
         return Result.string(vod);
     }
 
