@@ -1,6 +1,7 @@
 package com.github.catvod.spider;
 
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
 
 import com.github.catvod.bean.Class;
@@ -19,6 +20,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MissAV extends Spider {
 
@@ -54,6 +56,7 @@ public class MissAV extends Spider {
         List<Class> classes = new ArrayList<>();
         classes.add(new Class("https://missav.ws/dm588/cn/release", "新作上市"));
         classes.add(new Class("https://missav.ws/dm257/cn/monthly-hot", "本月热门"));
+        classes.add(new Class("https://missav.ws/cn/actresses", "女优一览"));
         for (int i = 1; i <= 3; i++) {
             JXDocument doc = JXDocument.create(fetch("https://missav.ws/cn/genres?page=" + i));
             List<JXNode> vodNodes = doc.selN("//div[1]/div[3]/div[1]/div/div[*]/a");
@@ -68,18 +71,44 @@ public class MissAV extends Spider {
 
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
-        String webUrl = tid + "?page=" + pg;
-        JXDocument doc = JXDocument.create(fetch(webUrl));
-        List<Vod> list = new ArrayList<>();
-        List<JXNode> vodNodes = doc.selN("//div[1]/div[3]/div[2]/div[*]/div");
-        for (int i = 0; i < vodNodes.size(); i++) {
-            JXNode vodNode = vodNodes.get(i);
-            String url = vodNode.selOne(".//div[1]/a[1]/@href") + "";
-            String pic = vodNode.selOne(".//div[1]/a[1]/img/@data-src") + "";
-            String name = vodNode.selOne(".//div[1]/a[1]/img/@alt") + "";
-            list.add(new Vod(url, name, pic, ""));
+        if (tid.equals("https://missav.ws/cn/actresses")) {
+            return ladyList(tid, pg);
+        } else {
+            String webUrl = tid + "?page=" + pg;
+            JXDocument doc = JXDocument.create(fetch(webUrl));
+            List<Vod> list = new ArrayList<>();
+            List<JXNode> vodNodes = doc.selN("//div[@class='thumbnail group']");
+            for (int i = 0; i < vodNodes.size(); i++) {
+                JXNode vodNode = vodNodes.get(i);
+                String url = vodNode.selOne(".//div[1]/a[1]/@href") + "";
+                String pic = vodNode.selOne(".//div[1]/a[1]/img/@data-src") + "";
+                String name = vodNode.selOne(".//div[1]/a[1]/img/@alt") + "";
+
+                list.add(new Vod(url, name, pic, ""));
+            }
+            return Result.string(list);
         }
-        return Result.string(list);
+
+    }
+
+    private String ladyList(String tid, String pg) {
+        List<Vod> vods = new ArrayList<>();
+        if (StringUtils.isNotBlank(pg)) {
+            tid = tid + "?page=" + pg;
+        }
+        JXDocument doc = JXDocument.create(fetch(tid));
+        List<JXNode> vodNodes = doc.selN("//img[@class='object-cover object-top w-full h-full']");
+        for (JXNode vodNode : vodNodes) {
+            String url = vodNode.selOne("./../../@href") + "";
+            String name = vodNode.selOne("./@alt").asString();
+            String pic = vodNode.selOne("./@src").asString();
+            String remark = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                remark = vodNode.sel("./../../../div/a/p/text()").stream().map(JXNode::asString).collect(Collectors.joining(","));
+            }
+            vods.add(new Vod(url, name, pic, remark, true));
+        }
+        return Result.string(vods);
     }
 
     protected String fetch(String webUrl) {
@@ -131,9 +160,7 @@ public class MissAV extends Spider {
                     if (i > 0) {
                         linkStr.append("(");
                     }
-                    linkStr.append("[a=cr:{\"scheme\":\"search\"}/]")
-                            .append(nameParts.get(i))
-                            .append("[/a]");
+                    linkStr.append("[a=cr:{\"scheme\":\"search\"}/]").append(nameParts.get(i)).append("[/a]");
                     if (i > 0) {
                         linkStr.append(")");
                     }
