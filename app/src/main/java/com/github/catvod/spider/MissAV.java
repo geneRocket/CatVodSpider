@@ -22,8 +22,6 @@ import java.util.List;
 
 public class MissAV extends Spider {
 
-    private static final String siteUrl = "https://missav.ws";
-
     Context context;
 
     @Override
