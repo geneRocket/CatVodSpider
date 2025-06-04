@@ -128,11 +128,17 @@ public class MissAV extends Spider {
 
                 // 构造链接
                 for (int i = 0; i < nameParts.size(); i++) {
+                    if (i > 0) {
+                        linkStr.append("(");
+                    }
                     linkStr.append("[a=cr:{\"scheme\":\"search\"}/]")
                             .append(nameParts.get(i))
                             .append("[/a]");
-                    linkStr.append(" ");
+                    if (i > 0) {
+                        linkStr.append(")");
+                    }
                 }
+                linkStr.append(" ");
 
             }
 
