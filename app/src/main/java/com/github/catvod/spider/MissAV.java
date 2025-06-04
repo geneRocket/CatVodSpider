@@ -101,18 +101,26 @@ public class MissAV extends Spider {
         vod.setVodRemarks(code);
         vod.setVodContent(intro);
         vod.setVodYear(doc.selNOne("//span[text()='发行日期:']/../time[1]/text()") + "");
-        String actor=doc.selNOne("//span[text()='女优:']/../a[1]/text()")+"";
-        if(StringUtils.isNotBlank(actor)){
-            vod.setVodActor("[a=cr:{\"scheme\":\"search\"}/]$token[/a]".replace("$token",  actor));
+        String actor = doc.selNOne("//span[text()='女优:']/../a[1]/text()") + "";
+        if (StringUtils.isNotBlank(actor)) {
+            vod.setVodActor("[a=cr:{\"scheme\":\"search\"}/]$token[/a]".replace("$token", actor));
         }
         return Result.string(vod);
     }
 
-    @Override
     public String searchContent(String key, boolean quick) throws Exception {
+        return searchContent(key,quick,null);
+    }
+
+    @Override
+    public String searchContent(String key, boolean quick, String pg) throws Exception {
         WebViewSpider webViewSpider = new WebViewSpider(context);
 
         String webUrl = "https://missav.ws/cn/search/" + URLEncoder.encode(key, "UTF-8");
+        if (StringUtils.isNotBlank(pg)) {
+            webUrl += "?page=" + pg;
+        }
+
         Log.d("开始搜索", webUrl);
         String htmlSource = webViewSpider.getHtmlSource(webUrl, getHeaders());
 
