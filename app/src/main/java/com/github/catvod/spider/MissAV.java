@@ -130,48 +130,18 @@ public class MissAV extends Spider {
         vod.setVodRemarks(code);
         vod.setVodContent(intro);
         vod.setVodYear(doc.selNOne("//span[text()='发行日期:']/../time[1]/text()") + "");
-        List<JXNode> actors = doc.selN("//span[text()='女优:']/../a/text()");
+        List<JXNode> actors = doc.selN("//span[text()='女优:']/../a");
         if (!actors.isEmpty()) {
             StringBuilder linkStr = new StringBuilder();
 
             for (JXNode actorNode : actors) {
-                String actor = actorNode.asString().trim();
-
-                // 替换全角括号为半角，便于统一处理
-                actor = actor.replace('（', '(').replace('）', ')');
-
-                // 提取括号外和括号内的名字（最多两个）
-                List<String> nameParts = new ArrayList<>();
-                if (actor.contains("(")) {
-                    String name1 = actor.substring(0, actor.indexOf("("));
-                    String name2 = actor.substring(actor.indexOf("(") + 1, actor.indexOf(")"));
-
-                    nameParts.add(name1);
-                    if (name2 != null && !name2.equals(name1)) {  // 避免重复
-                        nameParts.add(name2);
-                    }
-                } else {
-                    // 如果不匹配正则，尝试按空格粗暴拆分
-                    nameParts.add(actor);
-                }
-
-                // 构造链接
-                for (int i = 0; i < nameParts.size(); i++) {
-                    if (i > 0) {
-                        linkStr.append("(");
-                    }
-                    linkStr.append("[a=cr:{\"scheme\":\"search\"}/]").append(nameParts.get(i)).append("[/a]");
-                    if (i > 0) {
-                        linkStr.append(")");
-                    }
-                }
+                String actor = actorNode.selOne("./text()").asString().trim();
+                String href = actorNode.selOne("./@href").asString().trim();
+                linkStr.append("[a=cr:$json/]".replace("$json", new Gson().toJson(new Class(href, actor)))).append(actor).append("[/a]");
                 linkStr.append(" ");
-
             }
-
             vod.setVodActor(linkStr.toString().trim());
         }
-
         return Result.string(vod);
     }
 
