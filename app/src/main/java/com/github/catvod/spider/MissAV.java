@@ -11,6 +11,7 @@ import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
 import com.google.gson.Gson;
 
+import org.apache.commons.lang3.StringUtils;
 import org.seimicrawler.xpath.JXDocument;
 import org.seimicrawler.xpath.JXNode;
 
@@ -27,7 +28,7 @@ public class MissAV extends Spider {
 
     @Override
     public void init(Context context) throws Exception {
-        this.context=context;
+        this.context = context;
     }
 
     private HashMap<String, String> getHeaders() {
@@ -91,11 +92,17 @@ public class MissAV extends Spider {
 
     @Override
     public String detailContent(List<String> ids) throws Exception {
-
+        String webUrl = ids.get(0);
         Vod vod = new Vod();
-        vod.setVodId(ids.get(0));
-        vod.setVodPlayFrom("MissAV");
-        vod.setVodPlayUrl(ids.get(0));
+        vod.setVodId(webUrl);
+        vod.setVodPlayUrl(webUrl);
+        JXDocument doc = JXDocument.create(fetch(webUrl));
+        String code = doc.selNOne("//span[text()='番号:']/../span[2]/text()") + "";
+        String intro = doc.selNOne("//div[@class='mb-1 text-secondary break-all line-clamp-2']/text()") + "";
+        vod.setVodRemarks(code);
+        vod.setVodContent(intro);
+        vod.setVodYear(doc.selNOne("//span[text()='发行日期:']/../time[1]/text()") + "");
+        vod.setVodActor(doc.selNOne("//span[text()='女优:']/../a[1]/text()") + "");
         return Result.string(vod);
     }
 
