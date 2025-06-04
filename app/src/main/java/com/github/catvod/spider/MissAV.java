@@ -137,9 +137,9 @@ public class MissAV extends Spider {
         List<Vod> list = new ArrayList<>();
         List<JXNode> vodNodes = doc.selN("//div[@class='my-2 text-sm text-nord4 truncate']");
         for (JXNode vodNode : vodNodes) {
-            String name = vodNode.selOne("./a/text()").asString();
-            String pic = vodNode.selOne("./../div[1]/a[1]/img/@data-src").asString();
-            String url = vodNode.selOne("./../div[1]/a[1]/@href").asString();
+            String name = vodNode.selOne("./a/text()") + "";
+            String pic = vodNode.selOne("./../div[1]/a[1]/img/@data-src") + "";
+            String url = vodNode.selOne("./../div[1]/a[1]/@href") + "";
             list.add(new Vod(url, name, pic, ""));
         }
         Log.d("结束搜索", new Gson().toJson(list));
