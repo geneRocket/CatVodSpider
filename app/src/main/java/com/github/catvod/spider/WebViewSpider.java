@@ -169,12 +169,9 @@ public class WebViewSpider {
         // 加载目标网页
         latch.await();
 
-        CountDownLatch closeLatch = new CountDownLatch(1);
         mainHandler.post(() -> {
             webView.destroy();
-            closeLatch.countDown();
         });
-        closeLatch.await();
 
         return htmlSource;
     }
