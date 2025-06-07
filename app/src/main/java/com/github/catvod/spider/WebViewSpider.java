@@ -136,7 +136,7 @@ public class WebViewSpider {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                execJsGetSource(() -> {
+                execJsGetSource(false, () -> {
                     latch.countDown();
                 });
             }
@@ -144,8 +144,8 @@ public class WebViewSpider {
 
     }
 
-    private void execJsGetSource(Runnable callBack) {
-        CountDownLatch latch=new CountDownLatch(1);
+    private void execJsGetSource(boolean sync, Runnable callBack) {
+        CountDownLatch latch = new CountDownLatch(1);
 
         mainHandler.post(() -> {
             webView.evaluateJavascript(
@@ -161,10 +161,12 @@ public class WebViewSpider {
                     }
             );
         });
-        try {
-            latch.await(30,TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
+        if (sync) {
+            try {
+                latch.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
 
+            }
         }
     }
 
@@ -179,7 +181,7 @@ public class WebViewSpider {
         });
         // 加载目标网页
         if (!latch.await(5, TimeUnit.SECONDS)) {
-            execJsGetSource(null);
+            execJsGetSource(true, null);
         }
 
         mainHandler.post(() -> {
