@@ -21,6 +21,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.Request;
 import okhttp3.Response;
@@ -138,23 +139,38 @@ public class WebViewSpider {
                 super.onPageFinished(view, url);
 
 
-                mainHandler.postDelayed(() -> {
-                    if (webView != null) {
-                        webView.evaluateJavascript(
-                                "(function() { return document.documentElement.outerHTML; })();",
-                                html -> {
+                execJsGetSource(() -> {
+                    latch.countDown();
+                });
 
-                                    htmlSource = StringEscapeUtils.unescapeEcmaScript(html);
-                                    htmlSource = htmlSource.substring(1, htmlSource.length() - 1);
-                                    latch.countDown();
-                                }
-                        );
-                    }
-                }, 2000);
 
             }
         });
 
+    }
+
+    private void execJsGetSource(Runnable callBack) {
+        CountDownLatch latch=new CountDownLatch(1);
+
+        mainHandler.post(() -> {
+            webView.evaluateJavascript(
+                    "(function() { return document.documentElement.outerHTML; })();",
+                    html -> {
+
+                        htmlSource = StringEscapeUtils.unescapeEcmaScript(html);
+                        htmlSource = htmlSource.substring(1, htmlSource.length() - 1);
+                        latch.countDown();
+                        if (callBack != null) {
+                            callBack.run();
+                        }
+                    }
+            );
+        });
+        try {
+            latch.await(30,TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
@@ -167,7 +183,9 @@ public class WebViewSpider {
             webView.loadUrl(webUrl, header);
         });
         // 加载目标网页
-        latch.await();
+        if (!latch.await(5, TimeUnit.SECONDS)) {
+            execJsGetSource(null);
+        }
 
         mainHandler.post(() -> {
             webView.destroy();
