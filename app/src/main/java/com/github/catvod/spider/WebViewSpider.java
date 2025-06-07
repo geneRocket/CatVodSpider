@@ -169,7 +169,7 @@ public class WebViewSpider {
         try {
             latch.await(30,TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+
         }
     }
 
