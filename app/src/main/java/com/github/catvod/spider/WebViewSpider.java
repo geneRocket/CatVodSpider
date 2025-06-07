@@ -136,14 +136,9 @@ public class WebViewSpider {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-
-
                 execJsGetSource(() -> {
                     latch.countDown();
                 });
-
-
             }
         });
 
