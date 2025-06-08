@@ -1,7 +1,30 @@
 {
   "spider": "./jar/custom_spider.jar",
   "lives": [
-    
+    {
+      "name": "iptv-org",
+      "type": 0,
+      "url": "https://iptv-org.github.io/iptv/index.m3u",
+      "playerType": 2
+    },
+    {
+      "name": "adultiptv-chs",
+      "type": 0,
+      "url": "https://adultiptv.net/chs.m3u",
+      "playerType": 2
+    },
+    {
+      "name": "adultiptv-videos",
+      "type": 0,
+      "url": "http://adultiptv.net/videos.m3u8",
+      "playerType": 2
+    },
+    {
+      "name": "xxx",
+      "type": 0,
+      "url": "https://raw.githubusercontent.com/hujingguang/ChinaIPTV/refs/heads/main/xxx.m3u8",
+      "playerType": 2
+    }
   ],
   "sites": [
     {
@@ -14,10 +37,8 @@
     }
   ],
   "doh": [
-    
   ],
   "proxy": [
-   
   ],
   "rules": [
     {
