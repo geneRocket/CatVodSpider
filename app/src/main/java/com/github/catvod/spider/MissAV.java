@@ -106,7 +106,9 @@ public class MissAV extends Spider {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 remark = vodNode.sel("./../../../div/a/p[2]/text()").stream().map(JXNode::asString).collect(Collectors.joining(","));
             }
-            vods.add(new Vod(url, name, pic, remark, true));
+            Vod vod=new Vod(url, name, pic, remark, true);
+            vod.setStyle(Vod.Style.rect());
+            vods.add(vod);
         }
         return Result.string(vods);
     }
