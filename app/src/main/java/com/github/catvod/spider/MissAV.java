@@ -20,6 +20,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class MissAV extends Spider {
@@ -182,4 +183,14 @@ public class MissAV extends Spider {
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         return Result.get().parse().url(id).header(getHeaders()).string();
     }
+
+    public boolean manualVideoCheck() throws Exception {
+        return true;
+    }
+
+    public boolean isVideoFormat(String url) throws Exception {
+        final Pattern SNIFFER = Pattern.compile("http((?!http).){12,}?\\.(m3u8)\\?.*|http((?!http).){12,}\\.(m3u8)");
+        return SNIFFER.matcher(url).find();
+    }
+
 }
