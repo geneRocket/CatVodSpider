@@ -181,16 +181,17 @@ public class MissAV extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        return Result.get().parse().url(id).header(getHeaders()).string();
+
+        WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
+
+        String script = "document.getElementsByClassName('plyr__control plyr__control--overlaid')[0].click()";
+
+        Pattern SNIFFER = Pattern.compile("http((?!http).){12,}?\\.(m3u8)\\?.*|http((?!http).){12,}\\.(m3u8)");
+
+        String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(id, getHeaders(), script, SNIFFER);
+
+        return Result.get().url(videoUrl).header(getHeaders()).string();
     }
 
-    public boolean manualVideoCheck() throws Exception {
-        return true;
-    }
-
-    public boolean isVideoFormat(String url) throws Exception {
-        final Pattern SNIFFER = Pattern.compile("http((?!http).){12,}?\\.(m3u8)\\?.*|http((?!http).){12,}\\.(m3u8)");
-        return SNIFFER.matcher(url).find();
-    }
 
 }

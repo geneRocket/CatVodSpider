@@ -45,15 +45,7 @@
   "proxy": [
   ],
   "rules": [
-    {
-      "name": "missav",
-      "hosts": [
-        "missav.ws"
-      ],
-      "script": [
-        "document.getElementsByClassName('plyr__control plyr__control--overlaid')[0].click()"
-      ]
-    }
+    
   ],
   "ads": [
   ]
