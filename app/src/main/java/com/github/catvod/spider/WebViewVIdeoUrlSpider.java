@@ -78,7 +78,6 @@ public class WebViewVIdeoUrlSpider {
                     if (SNIFFER.matcher(url).find()) {
                         videoUrl=url;
                         latch.countDown();
-                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
 
