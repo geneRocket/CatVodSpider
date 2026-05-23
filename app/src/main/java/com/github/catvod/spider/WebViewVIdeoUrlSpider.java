@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.webkit.SslErrorHandler;
+import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -17,6 +18,7 @@ import com.github.catvod.net.OkHttp;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -32,10 +34,12 @@ public class WebViewVIdeoUrlSpider {
     WebView webView;
     CountDownLatch latch;
     String jsScript;
+    String webUrl;
 
     Pattern SNIFFER;
 
     String videoUrl;
+    Map<String, String> videoHeaders = new HashMap<>();
 
     Handler mainHandler;
 
@@ -76,7 +80,11 @@ public class WebViewVIdeoUrlSpider {
                     }
 
                     if (SNIFFER.matcher(url).find()) {
-                        videoUrl=url;
+                        videoUrl = url;
+                        videoHeaders.clear();
+                        videoHeaders.putAll(request.getRequestHeaders());
+                        putCookie(url);
+                        putCookie(webUrl);
                         latch.countDown();
                     }
 
@@ -157,6 +165,7 @@ public class WebViewVIdeoUrlSpider {
 
 
     public String getVideoUrl(String webUrl, Map<String, String> header, String jsScript, Pattern SNIFFER) throws Exception {
+        this.webUrl = webUrl;
         this.jsScript = jsScript;
         this.SNIFFER = SNIFFER;
 
@@ -174,5 +183,16 @@ public class WebViewVIdeoUrlSpider {
         });
 
         return videoUrl;
+    }
+
+    private void putCookie(String url) {
+        String cookie = CookieManager.getInstance().getCookie(url);
+        if (cookie == null || cookie.isEmpty()) return;
+        String old = videoHeaders.get("Cookie");
+        videoHeaders.put("Cookie", old == null || old.isEmpty() ? cookie : old + "; " + cookie);
+    }
+
+    public Map<String, String> getVideoHeaders() {
+        return videoHeaders;
     }
 }

@@ -2,6 +2,7 @@ package com.github.catvod.spider;
 
 import android.content.Context;
 import android.os.Build;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.github.catvod.bean.Class;
@@ -25,7 +26,8 @@ import java.util.stream.Collectors;
 
 public class MissAV extends Spider {
 
-    Context context;
+    private static final String siteUrl = "https://missav.ws";
+    private Context context;
 
     @Override
     public void init(Context context) throws Exception {
@@ -34,21 +36,29 @@ public class MissAV extends Spider {
 
     private HashMap<String, String> getHeaders() {
         HashMap<String, String> headers = new HashMap<>();
-        headers.put("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
-        headers.put("accept-language", "zh-CN,zh;q=0.9");
-        headers.put("dnt", "1");
-        headers.put("priority", "u=0, i");
-        headers.put("sec-ch-ua", "\"Chromium\";v=\"136\", \"Google Chrome\";v=\"136\", \"Not.A/Brand\";v=\"99\"");
-        headers.put("sec-ch-ua-mobile", "?0");
-        headers.put("sec-ch-ua-platform", "\"macOS\"");
-        headers.put("sec-fetch-dest", "document");
-        headers.put("sec-fetch-mode", "navigate");
-        headers.put("sec-fetch-site", "none");
-        headers.put("sec-fetch-user", "?1");
-        headers.put("sec-gpc", "1");
-        headers.put("upgrade-insecure-requests", "1");
-        headers.put("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36");
+        headers.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8");
+        headers.put("Accept-Language", "zh-CN,zh;q=0.9");
+        headers.put("DNT", "1");
+        headers.put("Upgrade-Insecure-Requests", "1");
+        headers.put("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36");
         return headers;
+    }
+
+    protected String fetch(String webUrl) {
+        SpiderDebug.log(webUrl);
+        String html = OkHttp.string(webUrl, getHeaders());
+        if (isChallenge(html) && context != null) {
+            try {
+                html = new WebViewSpider(context).getHtmlSource(webUrl, getHeaders());
+            } catch (Exception e) {
+                SpiderDebug.log(e);
+            }
+        }
+        return html;
+    }
+
+    private boolean isChallenge(String html) {
+        return !TextUtils.isEmpty(html) && (html.contains("cf-mitigated") || html.contains("_cf_chl_opt") || html.contains("Just a moment"));
     }
 
     @Override
@@ -89,7 +99,6 @@ public class MissAV extends Spider {
             }
             return Result.string(list);
         }
-
     }
 
     private String ladyList(String tid, String pg) {
@@ -114,12 +123,6 @@ public class MissAV extends Spider {
         return Result.string(vods);
     }
 
-    protected String fetch(String webUrl) {
-        SpiderDebug.log(webUrl);
-        String res = OkHttp.string(webUrl, getHeaders());
-        return res;
-    }
-
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String webUrl = ids.get(0);
@@ -136,7 +139,6 @@ public class MissAV extends Spider {
         List<JXNode> actors = doc.selN("//span[text()='女优:']/../a");
         if (!actors.isEmpty()) {
             StringBuilder linkStr = new StringBuilder();
-
             for (JXNode actorNode : actors) {
                 String actor = actorNode.selOne("./text()").asString().trim();
                 String href = actorNode.selOne("./@href").asString().trim();
@@ -155,7 +157,6 @@ public class MissAV extends Spider {
     @Override
     public String searchContent(String key, boolean quick, String pg) throws Exception {
         WebViewSpider webViewSpider = new WebViewSpider(context);
-
         String webUrl = "https://missav.ws/cn/search/" + URLEncoder.encode(key, "UTF-8");
         if (StringUtils.isNotBlank(pg)) {
             webUrl += "?page=" + pg;
@@ -163,7 +164,6 @@ public class MissAV extends Spider {
 
         Log.d("开始搜索", webUrl);
         String htmlSource = webViewSpider.getHtmlSource(webUrl, getHeaders());
-
         JXDocument doc = JXDocument.create(htmlSource);
         List<Vod> list = new ArrayList<>();
         List<JXNode> vodNodes = doc.selN("//div[@class='my-2 text-sm text-nord4 truncate']");
@@ -174,24 +174,21 @@ public class MissAV extends Spider {
             list.add(new Vod(url, name, pic, ""));
         }
         Log.d("结束搜索", new Gson().toJson(list));
-
         return Result.string(list);
     }
 
-
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-
         WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
-
         String script = "document.getElementsByClassName('plyr__control plyr__control--overlaid')[0].click()";
-
-        Pattern SNIFFER = Pattern.compile("http((?!http).){12,}?\\.(m3u8)\\?.*|http((?!http).){12,}\\.(m3u8)");
-
-        String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(id, getHeaders(), script, SNIFFER);
-
-        return Result.get().url(videoUrl).header(getHeaders()).string();
+        Pattern sniffer = Pattern.compile("http((?!http).){12,}?\\.(m3u8)\\?.*|http((?!http).){12,}\\.(m3u8)");
+        String webUrl = id;
+        String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), script, sniffer);
+        if (TextUtils.isEmpty(videoUrl)) return "";
+        HashMap<String, String> headers = getHeaders();
+        headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
+        headers.put("Referer", webUrl);
+        headers.put("Origin", siteUrl);
+        return Result.get().url(videoUrl).header(headers).string();
     }
-
-
 }
