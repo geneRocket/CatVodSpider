@@ -38,6 +38,18 @@
         "type": "rect",
         "ratio": 1.5
       }
+    },
+    {
+      "key": "91Porn",
+      "name": "91Porn",
+      "type": 3,
+      "api": "csp_NinetyOnePorn",
+      "searchable": 1,
+      "changeable": 0,
+      "style": {
+        "type": "rect",
+        "ratio": 1.5
+      }
     }
   ],
   "doh": [

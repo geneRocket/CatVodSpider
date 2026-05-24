@@ -8,6 +8,7 @@ import com.github.catvod.R;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.spider.Init;
 import com.github.catvod.spider.MissAV;
+import com.github.catvod.spider.NinetyOnePorn;
 import com.github.catvod.spider.Proxy;
 import com.orhanobut.logger.AndroidLogAdapter;
 import com.orhanobut.logger.Logger;
@@ -56,8 +57,8 @@ public class MainActivity extends Activity {
         ProxySelector.setDefault(new ProxySelector() {
             @Override
             public List<java.net.Proxy> select(URI uri) {
-                if(uri.getHost().contains("missav")){
-                    return Collections.singletonList(new java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress.createUnresolved("192.168.10.200", 52262)));
+                if(uri.getHost().contains("missav")||uri.getHost().contains("91")){
+                    return Collections.singletonList(new java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress.createUnresolved("192.168.1.101", 7897)));
 
                 }
                 return Collections.singletonList( java.net.Proxy.NO_PROXY);
@@ -74,7 +75,7 @@ public class MainActivity extends Activity {
     private void initSpider() {
         try {
             Init.init(getApplicationContext());
-            spider = new MissAV();
+            spider = new NinetyOnePorn();
             spider.init(this, "");
         } catch (Throwable e) {
             e.printStackTrace();
@@ -100,9 +101,9 @@ public class MainActivity extends Activity {
     public void categoryContent() {
         try {
             HashMap<String, String> extend = new HashMap<>();
-            extend.put("c", "19");
-            extend.put("year", "2024");
-            Logger.t("categoryContent").d(spider.categoryContent("release", "2", true, extend));
+//            extend.put("c", "19");
+//            extend.put("year", "2024");
+            Logger.t("categoryContent").d(spider.categoryContent("rf", "1", false, extend));
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -110,7 +111,7 @@ public class MainActivity extends Activity {
 
     public void detailContent() {
         try {
-            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("https://missav.ws/cn/xvsr-819")));
+            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("https://91porn.com/view_video.php?viewkey=47081843c4cbe2496e57&page=1&c=akrorh&viewtype=basic&category=top")));
         } catch (Throwable e) {
             e.printStackTrace();
         }
@@ -118,7 +119,7 @@ public class MainActivity extends Activity {
 
     public void playerContent() {
         try {
-            Logger.t("playerContent").d(spider.playerContent("", "382044/1/78", new ArrayList<>()));
+            Logger.t("playerContent").d(spider.playerContent("", "https://91porn.com/view_video.php?viewkey=47081843c4cbe2496e57&page=1&c=akrorh&viewtype=basic&category=top", new ArrayList<>()));
         } catch (Throwable e) {
             e.printStackTrace();
         }
