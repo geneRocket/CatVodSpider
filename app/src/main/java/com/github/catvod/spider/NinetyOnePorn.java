@@ -13,7 +13,9 @@ import org.jsoup.nodes.Element;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.regex.Matcher;
@@ -23,7 +25,8 @@ public class NinetyOnePorn extends Spider {
 
     private static final String siteUrl = "https://www.91porn.com";
     private static final Pattern SOURCE = Pattern.compile("<source\\s+src=['\"]([^'\"]+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ENCODED = Pattern.compile("strencode2?\\s*\\(\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern STRENCODE_PATTERN = Pattern.compile("strencode\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern STRENCODE2_PATTERN = Pattern.compile("strencode2\\s*\\(\\s*['\"]([^'\"]+)['\"]");
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
 
     /**
@@ -130,6 +133,7 @@ public class NinetyOnePorn extends Spider {
 
     private List<Vod> parseList(String html) {
         List<Vod> list = new ArrayList<>();
+        HashSet<String> parsedUrls = new HashSet<>();
         Document doc = Jsoup.parse(html);
         for (Element element : doc.select("div.well.well-sm, div.list-channel, div.video-box, div.col-xs-12")) {
             Element parent = element.parent();
@@ -138,6 +142,8 @@ public class NinetyOnePorn extends Spider {
             if (a == null) continue;
 
             String url = fixUrl(a.attr("href"));
+            if (parsedUrls.contains(url)) continue;
+            parsedUrls.add(url);
 
             String name = "";
             Element titleEl = element.selectFirst("span.video-title, .video-title, .title");
@@ -202,12 +208,13 @@ public class NinetyOnePorn extends Spider {
     }
 
     private String parseSource(String html) throws Exception {
-        // 1. 优先尝试解析解密字段
-        Matcher matcher = ENCODED.matcher(html);
-        if (matcher.find()) {
+        // 1. 优先尝试解析 strencode（含有 cipher 和 key 两个主要参数的 XOR 解密算法）
+        Matcher matcher = STRENCODE_PATTERN.matcher(html);
+        while (matcher.find()) {
             try {
-                String base64Str = URLDecoder.decode(matcher.group(1), "UTF-8");
-                String decoded = decodeBase64(base64Str);
+                String cipher = URLDecoder.decode(matcher.group(1), "UTF-8");
+                String key = URLDecoder.decode(matcher.group(2), "UTF-8");
+                String decoded = decodeStrencode(cipher, key);
 
                 if (!decoded.isEmpty()) {
                     Matcher m2 = SOURCE.matcher(decoded);
@@ -217,32 +224,126 @@ public class NinetyOnePorn extends Spider {
                     if (m3.find()) return m3.group(1);
                 }
             } catch (Exception e) {
-                // 忽略解析失败，转入后续兜底
+                // 忽略当前匹配块的失败，继续尝试后续匹配
             }
         }
 
-        // 2. 尝试在去除注释后的源码中直接寻找 source 标签
+        // 2. 尝试解析 strencode2（纯 unescape 编码的参数）
+        matcher = STRENCODE2_PATTERN.matcher(html);
+        while (matcher.find()) {
+            try {
+                String encoded = URLDecoder.decode(matcher.group(1), "UTF-8");
+                String decoded = unescape(encoded);
+
+                if (!decoded.isEmpty()) {
+                    Matcher m2 = SOURCE.matcher(decoded);
+                    if (m2.find()) return m2.group(1);
+
+                    Matcher m3 = Pattern.compile("(https?://[^'\"]+\\.(?:m3u8|mp4)[^'\"]*)").matcher(decoded);
+                    if (m3.find()) return m3.group(1);
+                }
+            } catch (Exception e) {
+                // 忽略当前匹配块的失败，继续尝试后续匹配
+            }
+        }
+
+        // 3. 尝试在去除注释后的源码中直接寻找 source 标签
         matcher = SOURCE.matcher(html.replaceAll("(?s)<!--.*?-->", ""));
         if (matcher.find()) return matcher.group(1);
 
-        // 3. 兜底策略：在全文捕获可能的 m3u8 或者 mp4 直链
+        // 4. 兜底策略：在全文捕获可能的 m3u8 或者 mp4 直链
         Matcher m4 = Pattern.compile("(https?://[^'\"]+\\.(?:m3u8|mp4)[^'\"]*)").matcher(html);
         if (m4.find()) return m4.group(1);
 
         return "";
     }
 
-    private String decodeBase64(String str) {
+    private String decodeStrencode(String cipher, String key) {
         try {
-            byte[] bytes = java.util.Base64.getDecoder().decode(str.trim());
-            return new String(bytes, "UTF-8");
+            // 1. 将密文先进行 Base64 解码，还原成字节数组
+            byte[] cipherBytes = Base64.getDecoder().decode(cipher.trim());
+            byte[] keyBytes = key.getBytes("UTF-8");
+            int keyLen = keyBytes.length;
+            byte[] xorBytes = new byte[cipherBytes.length];
+
+            // 2. 利用密钥逐字节进行 XOR 运算
+            for (int i = 0; i < cipherBytes.length; i++) {
+                int k = i % keyLen;
+                xorBytes[i] = (byte) ((cipherBytes[i] & 0xFF) ^ (keyBytes[k] & 0xFF));
+            }
+
+            // 3. XOR 后的数据是一个 Base64 格式的字符串，需要再次对其进行 Base64 解码获得最终结果
+            String xorStr = new String(xorBytes, "UTF-8").trim();
+            byte[] finalBytes = Base64.getDecoder().decode(xorStr);
+            return new String(finalBytes, "UTF-8");
         } catch (Exception e) {
+            // 如果遇到异常，尝试使用 Mime 格式解码作为兼容手段
             try {
-                byte[] bytes = java.util.Base64.getMimeDecoder().decode(str.trim());
-                return new String(bytes, "UTF-8");
+                byte[] cipherBytes = Base64.getMimeDecoder().decode(cipher.trim());
+                byte[] keyBytes = key.getBytes("UTF-8");
+                int keyLen = keyBytes.length;
+                byte[] xorBytes = new byte[cipherBytes.length];
+                for (int i = 0; i < cipherBytes.length; i++) {
+                    int k = i % keyLen;
+                    xorBytes[i] = (byte) ((cipherBytes[i] & 0xFF) ^ (keyBytes[k] & 0xFF));
+                }
+                String xorStr = new String(xorBytes, "UTF-8").trim();
+                byte[] finalBytes = Base64.getMimeDecoder().decode(xorStr);
+                return new String(finalBytes, "UTF-8");
             } catch (Exception ex) {
                 return "";
             }
         }
+    }
+
+    private String unescape(String src) {
+        if (src == null) return "";
+        StringBuilder tmp = new StringBuilder();
+        tmp.ensureCapacity(src.length());
+        int lastPos = 0, pos = 0;
+        char ch;
+        while (pos < src.length()) {
+            pos = src.indexOf("%", lastPos);
+            if (pos == lastPos) {
+                if (pos + 1 < src.length() && src.charAt(pos + 1) == 'u') {
+                    if (pos + 6 <= src.length()) {
+                        try {
+                            ch = (char) Integer.parseInt(src.substring(pos + 2, pos + 6), 16);
+                            tmp.append(ch);
+                            lastPos = pos + 6;
+                        } catch (NumberFormatException e) {
+                            tmp.append(src.substring(pos, pos + 2));
+                            lastPos = pos + 2;
+                        }
+                    } else {
+                        tmp.append(src.substring(pos));
+                        lastPos = src.length();
+                    }
+                } else {
+                    if (pos + 3 <= src.length()) {
+                        try {
+                            ch = (char) Integer.parseInt(src.substring(pos + 1, pos + 3), 16);
+                            tmp.append(ch);
+                            lastPos = pos + 3;
+                        } catch (NumberFormatException e) {
+                            tmp.append(src.substring(pos, pos + 1));
+                            lastPos = pos + 1;
+                        }
+                    } else {
+                        tmp.append(src.substring(pos));
+                        lastPos = src.length();
+                    }
+                }
+            } else {
+                if (pos == -1) {
+                    tmp.append(src.substring(lastPos));
+                    lastPos = src.length();
+                } else {
+                    tmp.append(src.substring(lastPos, pos));
+                    lastPos = pos;
+                }
+            }
+        }
+        return tmp.toString();
     }
 }
