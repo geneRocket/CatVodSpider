@@ -1,5 +1,7 @@
 package com.github.catvod.spider;
 
+import android.util.Base64;
+
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
@@ -13,7 +15,6 @@ import org.jsoup.nodes.Element;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -77,7 +78,11 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         String url = siteUrl + "/v.php?category=" + tid + "&viewtype=basic&page=" + pg;
-        return Result.string(parseList(fetch(url)));
+        String html = fetch(url);
+        List<Vod> list = parseList(html);
+        int page = parsePage(pg);
+        int pageCount = parsePageCount(html, page);
+        return Result.get().page(page, pageCount, 24, pageCount * 24).vod(list).string();
     }
 
     @Override
@@ -135,7 +140,8 @@ public class NinetyOnePorn extends Spider {
         List<Vod> list = new ArrayList<>();
         HashSet<String> parsedUrls = new HashSet<>();
         Document doc = Jsoup.parse(html);
-        for (Element element : doc.select("div.well.well-sm, div.list-channel, div.video-box, div.col-xs-12")) {
+        for (Element element : doc.select("div.well.well-sm, div.list-channel, div.video-box")) {
+            if (element.classNames().contains("col-lg-8")) continue;
             Element parent = element.parent();
             if (parent != null && parent.classNames().contains("col-lg-8")) continue;
             Element a = element.selectFirst("a[href*=view_video]");
@@ -261,7 +267,7 @@ public class NinetyOnePorn extends Spider {
     private String decodeStrencode(String cipher, String key) {
         try {
             // 1. 将密文先进行 Base64 解码，还原成字节数组
-            byte[] cipherBytes = Base64.getDecoder().decode(cipher.trim());
+            byte[] cipherBytes = Base64.decode(cipher.trim(), Base64.DEFAULT);
             byte[] keyBytes = key.getBytes("UTF-8");
             int keyLen = keyBytes.length;
             byte[] xorBytes = new byte[cipherBytes.length];
@@ -274,12 +280,12 @@ public class NinetyOnePorn extends Spider {
 
             // 3. XOR 后的数据是一个 Base64 格式的字符串，需要再次对其进行 Base64 解码获得最终结果
             String xorStr = new String(xorBytes, "UTF-8").trim();
-            byte[] finalBytes = Base64.getDecoder().decode(xorStr);
+            byte[] finalBytes = Base64.decode(xorStr, Base64.DEFAULT);
             return new String(finalBytes, "UTF-8");
         } catch (Exception e) {
             // 如果遇到异常，尝试使用 Mime 格式解码作为兼容手段
             try {
-                byte[] cipherBytes = Base64.getMimeDecoder().decode(cipher.trim());
+                byte[] cipherBytes = Base64.decode(cipher.trim(), Base64.DEFAULT);
                 byte[] keyBytes = key.getBytes("UTF-8");
                 int keyLen = keyBytes.length;
                 byte[] xorBytes = new byte[cipherBytes.length];
@@ -288,7 +294,7 @@ public class NinetyOnePorn extends Spider {
                     xorBytes[i] = (byte) ((cipherBytes[i] & 0xFF) ^ (keyBytes[k] & 0xFF));
                 }
                 String xorStr = new String(xorBytes, "UTF-8").trim();
-                byte[] finalBytes = Base64.getMimeDecoder().decode(xorStr);
+                byte[] finalBytes = Base64.decode(xorStr, Base64.DEFAULT);
                 return new String(finalBytes, "UTF-8");
             } catch (Exception ex) {
                 return "";
