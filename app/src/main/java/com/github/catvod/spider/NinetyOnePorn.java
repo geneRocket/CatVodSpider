@@ -40,7 +40,6 @@ public class NinetyOnePorn extends Spider {
     private HashMap<String, String> getHeaders() {
         HashMap<String, String> headers = new HashMap<>();
         headers.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
-        headers.put("Accept-Encoding", "gzip, deflate");
         headers.put("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
         headers.put("Cache-Control", "max-age=0");
         headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
@@ -160,6 +159,21 @@ public class NinetyOnePorn extends Spider {
     private String parseDate(String text) {
         Matcher matcher = DATE.matcher(text);
         return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private int parsePage(String pg) {
+        try {
+            return Math.max(1, Integer.parseInt(pg));
+        } catch (Exception e) {
+            return 1;
+        }
+    }
+
+    private int parsePageCount(String html, int page) {
+        int count = page;
+        Matcher matcher = Pattern.compile("[?&]page=(\\d+)").matcher(html);
+        while (matcher.find()) count = Math.max(count, parsePage(matcher.group(1)));
+        return count;
     }
 
     private String fixUrl(String url) {
