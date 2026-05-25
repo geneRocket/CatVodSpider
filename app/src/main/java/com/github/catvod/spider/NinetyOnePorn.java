@@ -1,5 +1,6 @@
 package com.github.catvod.spider;
 
+import android.content.Context;
 import android.util.Base64;
 
 import com.github.catvod.bean.Class;
@@ -11,9 +12,9 @@ import com.github.catvod.net.OkHttp;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 
 import java.io.IOException;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,10 +32,17 @@ import okhttp3.Response;
 public class NinetyOnePorn extends Spider {
 
     private static final String siteUrl = "https://www.91porn.com";
-    private static final Pattern SOURCE = Pattern.compile("<source\\s+src=['\"]([^'\"]+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern STRENCODE_PATTERN = Pattern.compile("strencode\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]");
-    private static final Pattern STRENCODE2_PATTERN = Pattern.compile("strencode2\\s*\\(\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern SOURCE = Pattern.compile("<source\\b[^>]*\\bsrc\\s*=\\s*['\"]([^'\"]+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern VIDEO_URL = Pattern.compile("(https?://[^'\"<>\\s]+\\.(?:m3u8|mp4)(?:\\?[^'\"<>\\s]*)?)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern STRENCODE_PATTERN = Pattern.compile("strencode\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"](?:\\s*,\\s*['\"]([^'\"]*)['\"])?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern STRENCODE2_PATTERN = Pattern.compile("strencode2\\s*\\(\\s*['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE);
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
+    private Context context;
+
+    @Override
+    public void init(Context context) throws Exception {
+        this.context = context;
+    }
 
     /**
      * 随机生成国内段 IP 防止每日的限制
@@ -70,8 +78,22 @@ public class NinetyOnePorn extends Spider {
                 .build()
                 .newCall(request)
                 .execute()) {
-            return response.body() == null ? "" : response.body().string();
+            String html = response.body() == null ? "" : response.body().string();
+            return isChallenge(html) ? fetchByWebView(url) : html;
         } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private boolean isChallenge(String html) {
+        return html != null && (html.contains("cf-mitigated") || html.contains("_cf_chl_opt") || html.contains("Just a moment"));
+    }
+
+    private String fetchByWebView(String url) {
+        if (context == null) return "";
+        try {
+            return new WebViewSpider(context).getHtmlSource(url, getHeaders());
+        } catch (Exception e) {
             return "";
         }
     }
@@ -130,7 +152,7 @@ public class NinetyOnePorn extends Spider {
         vod.setVodActor(actor);
         vod.setVodContent(content);
         vod.setVodPlayFrom("91Porn");
-        vod.setVodPlayUrl("播放$"+parseSource(htmlSource));
+        vod.setVodPlayUrl("播放$"+parseSource(url, htmlSource));
         return Result.string(vod);
     }
 
@@ -147,7 +169,7 @@ public class NinetyOnePorn extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        String url = id.contains("view_video") ? parseSource(fetch(id)) : id;
+        String url = id.contains("view_video") ? parseSource(id, fetch(id)) : id;
         HashMap<String, String> headers = getHeaders();
         headers.put("Referer", id.contains("view_video") ? id : siteUrl + "/");
         return Result.get().url(url).header(headers).string();
@@ -231,91 +253,78 @@ public class NinetyOnePorn extends Spider {
     }
 
     private String parseSource(String html) throws Exception {
-        // 1. 优先尝试解析 strencode（含有 cipher 和 key 两个主要参数的 XOR 解密算法）
+        if (html == null || html.isEmpty()) return "";
+
+        // 1. 优先尝试解析 strencode，算法与 /js/m.js 中的 strencode 保持一致。
         Matcher matcher = STRENCODE_PATTERN.matcher(html);
         while (matcher.find()) {
             try {
-                String cipher = URLDecoder.decode(matcher.group(1), "UTF-8");
-                String key = URLDecoder.decode(matcher.group(2), "UTF-8");
-                String decoded = decodeStrencode(cipher, key);
-
-                if (!decoded.isEmpty()) {
-                    Matcher m2 = SOURCE.matcher(decoded);
-                    if (m2.find()) return m2.group(1);
-
-                    Matcher m3 = Pattern.compile("(https?://[^'\"]+\\.(?:m3u8|mp4)[^'\"]*)").matcher(decoded);
-                    if (m3.find()) return m3.group(1);
-                }
+                String decoded = decodeStrencode(matcher.group(1), matcher.group(2), matcher.group(3));
+                String source = extractSource(decoded);
+                if (!source.isEmpty()) return source;
             } catch (Exception e) {
                 // 忽略当前匹配块的失败，继续尝试后续匹配
             }
         }
 
-        // 2. 尝试解析 strencode2（纯 unescape 编码的参数）
+        // 2. 尝试解析 strencode2，它在 /js/m2.js 中只是 JS unescape(input)。
         matcher = STRENCODE2_PATTERN.matcher(html);
         while (matcher.find()) {
             try {
-                String encoded = URLDecoder.decode(matcher.group(1), "UTF-8");
-                String decoded = unescape(encoded);
-
-                if (!decoded.isEmpty()) {
-                    Matcher m2 = SOURCE.matcher(decoded);
-                    if (m2.find()) return m2.group(1);
-
-                    Matcher m3 = Pattern.compile("(https?://[^'\"]+\\.(?:m3u8|mp4)[^'\"]*)").matcher(decoded);
-                    if (m3.find()) return m3.group(1);
-                }
+                String source = extractSource(unescape(matcher.group(1)));
+                if (!source.isEmpty()) return source;
             } catch (Exception e) {
                 // 忽略当前匹配块的失败，继续尝试后续匹配
             }
         }
 
         // 3. 尝试在去除注释后的源码中直接寻找 source 标签
-        matcher = SOURCE.matcher(html.replaceAll("(?s)<!--.*?-->", ""));
-        if (matcher.find()) return matcher.group(1);
+        String source = extractSource(html.replaceAll("(?s)<!--.*?-->", ""));
+        if (!source.isEmpty()) return source;
 
         // 4. 兜底策略：在全文捕获可能的 m3u8 或者 mp4 直链
-        Matcher m4 = Pattern.compile("(https?://[^'\"]+\\.(?:m3u8|mp4)[^'\"]*)").matcher(html);
+        Matcher m4 = VIDEO_URL.matcher(html);
         if (m4.find()) return m4.group(1);
 
         return "";
     }
 
-    private String decodeStrencode(String cipher, String key) {
+    private String parseSource(String url, String html) throws Exception {
+        String source = parseSource(html);
+        if (!source.isEmpty() || context == null) return source;
+        return parseSource(fetchByWebView(url));
+    }
+
+    private String extractSource(String html) {
+        if (html == null || html.isEmpty()) return "";
+        Element source = Jsoup.parseBodyFragment(html).selectFirst("source[src]");
+        if (source != null) return source.attr("src").trim();
+        Matcher matcher = SOURCE.matcher(html);
+        if (matcher.find()) return Parser.unescapeEntities(matcher.group(1), true).trim();
+        matcher = VIDEO_URL.matcher(html);
+        return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    private String decodeStrencode(String cipher, String key, String mode) {
         try {
-            // 1. 将密文先进行 Base64 解码，还原成字节数组
+            if (mode != null && mode.endsWith("2")) {
+                String temp = cipher;
+                cipher = key;
+                key = temp;
+            }
             byte[] cipherBytes = Base64.decode(cipher.trim(), Base64.DEFAULT);
             byte[] keyBytes = key.getBytes("UTF-8");
             int keyLen = keyBytes.length;
             byte[] xorBytes = new byte[cipherBytes.length];
-
-            // 2. 利用密钥逐字节进行 XOR 运算
             for (int i = 0; i < cipherBytes.length; i++) {
                 int k = i % keyLen;
                 xorBytes[i] = (byte) ((cipherBytes[i] & 0xFF) ^ (keyBytes[k] & 0xFF));
             }
-
-            // 3. XOR 后的数据是一个 Base64 格式的字符串，需要再次对其进行 Base64 解码获得最终结果
             String xorStr = new String(xorBytes, "UTF-8").trim();
             byte[] finalBytes = Base64.decode(xorStr, Base64.DEFAULT);
             return new String(finalBytes, "UTF-8");
         } catch (Exception e) {
-            // 如果遇到异常，尝试使用 Mime 格式解码作为兼容手段
-            try {
-                byte[] cipherBytes = Base64.decode(cipher.trim(), Base64.DEFAULT);
-                byte[] keyBytes = key.getBytes("UTF-8");
-                int keyLen = keyBytes.length;
-                byte[] xorBytes = new byte[cipherBytes.length];
-                for (int i = 0; i < cipherBytes.length; i++) {
-                    int k = i % keyLen;
-                    xorBytes[i] = (byte) ((cipherBytes[i] & 0xFF) ^ (keyBytes[k] & 0xFF));
-                }
-                String xorStr = new String(xorBytes, "UTF-8").trim();
-                byte[] finalBytes = Base64.decode(xorStr, Base64.DEFAULT);
-                return new String(finalBytes, "UTF-8");
-            } catch (Exception ex) {
-                return "";
-            }
+            return "";
         }
     }
 
