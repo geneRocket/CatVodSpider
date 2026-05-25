@@ -24,6 +24,7 @@ public class NinetyOnePorn extends Spider {
     private static final String siteUrl = "https://www.91porn.com";
     private static final Pattern SOURCE = Pattern.compile("<source\\s+src=['\"]([^'\"]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern ENCODED = Pattern.compile("strencode2?\\s*\\(\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
 
     /**
      * 随机生成国内段 IP 防止每日 10 次的观看限额
@@ -86,10 +87,9 @@ public class NinetyOnePorn extends Spider {
         Element video = doc.selectFirst("video");
         String pic = video != null ? video.attr("poster") : "";
 
-        Element dateEl = doc.selectFirst("span.info:contains(添加时间:), span.info:contains(Added:)");
-        String date = dateEl != null && dateEl.nextElementSibling() != null ? dateEl.nextElementSibling().text().trim() : "";
+        String date = parseDate(doc.text());
 
-        Element actorEl = doc.selectFirst("a[href^=author.php]");
+        Element actorEl = doc.selectFirst("a[href*=uprofile.php], a[href^=author.php]");
         String actor = actorEl != null ? actorEl.text().trim() : "";
 
         Element contentEl = doc.selectFirst("#v_desc");
@@ -132,6 +132,8 @@ public class NinetyOnePorn extends Spider {
         List<Vod> list = new ArrayList<>();
         Document doc = Jsoup.parse(html);
         for (Element element : doc.select("div.well.well-sm, div.list-channel")) {
+            Element parent = element.parent();
+            if (parent != null && parent.classNames().contains("col-lg-8")) continue;
             Element a = element.selectFirst("a[href*=view_video]");
             if (a == null) continue;
 
@@ -153,6 +155,11 @@ public class NinetyOnePorn extends Spider {
             list.add(new Vod(url, name, pic, remark));
         }
         return list;
+    }
+
+    private String parseDate(String text) {
+        Matcher matcher = DATE.matcher(text);
+        return matcher.find() ? matcher.group(1) : "";
     }
 
     private String fixUrl(String url) {
