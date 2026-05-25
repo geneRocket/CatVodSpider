@@ -1,6 +1,7 @@
 package com.github.catvod.spider;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.util.Base64;
 
 import com.github.catvod.bean.Class;
@@ -169,10 +170,17 @@ public class NinetyOnePorn extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        String url = id.contains("view_video") ? parseSource(id, fetch(id)) : id;
+        WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
+//        String script = "document.getElementsByClassName('plyr__control plyr__control--overlaid')[0].click()";
+        Pattern sniffer = Pattern.compile("http((?!http).){12,}?\\.(m3u8|mp4)\\?.*|http((?!http).){12,}\\.(m3u8|mp4)");
+        String webUrl = id;
+        String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), null, sniffer);
+        if (TextUtils.isEmpty(videoUrl)) return "";
         HashMap<String, String> headers = getHeaders();
-        headers.put("Referer", id.contains("view_video") ? id : siteUrl + "/");
-        return Result.get().url(url).header(headers).string();
+        headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
+        headers.put("Referer", webUrl);
+        headers.put("Origin", siteUrl);
+        return Result.get().url(videoUrl).header(headers).string();
     }
 
     private List<Vod> parseList(String html) {
