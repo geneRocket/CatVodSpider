@@ -165,9 +165,10 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
-        Pattern sniffer = Pattern.compile("https?://[^\\s\"'<>?]{12,}\\.(?:m3u8|mp4)(?:\\?[^\\s\"'<>]*)?", Pattern.CASE_INSENSITIVE);
+        String script = "document.getElementsByClassName('vjs-big-play-button')[0].click()";
+        Pattern sniffer =  Pattern.compile("^https?://la\\.btc620\\.com/+(mp4\\d+)/(\\d+)\\.mp4\\?st=[a-zA-Z0-9_-]+&e=\\d+&f=[a-zA-Z0-9_-]+$",Pattern.CASE_INSENSITIVE);
         String webUrl = id;
-        String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), null, sniffer);
+        String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), script, sniffer);
         if (TextUtils.isEmpty(videoUrl)) return "";
         HashMap<String, String> headers = getHeaders();
         headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
