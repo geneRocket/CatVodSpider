@@ -129,7 +129,7 @@ public class NinetyOnePorn extends Spider {
         vod.setVodActor(actor);
         vod.setVodContent(content);
         vod.setVodPlayFrom("91Porn");
-        vod.setVodPlayUrl("播放$" + url);
+        vod.setVodPlayUrl(url);
         return Result.string(vod);
     }
 
