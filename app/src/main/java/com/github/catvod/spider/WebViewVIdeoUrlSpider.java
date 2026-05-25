@@ -194,20 +194,13 @@ public class WebViewVIdeoUrlSpider {
             candidates.add(new VideoCandidate(url, headers, contentLength));
         }
 
-        // 如果检测到文件大小大于 10MB，基本可以断定这是我们需要的完整视频，立即结束等待
-        if (contentLength > 10 * 1024 * 1024) {
-            if (latch != null) {
-                latch.countDown();
-            }
-        } else {
-            // 如果大小未知或较小（如可能为预览片、广告等），延时 1.5 秒再关闭，允许后续其他可能的视频请求进来
-            triggerDelayedCountDown();
-        }
+        triggerDelayedCountDown();
+
     }
 
     private void triggerDelayedCountDown() {
         delayHandler.removeCallbacks(countDownRunnable);
-        delayHandler.postDelayed(countDownRunnable, 1500);
+        delayHandler.postDelayed(countDownRunnable, 4000);
     }
 
     public String getVideoUrl(String webUrl, Map<String, String> header, String jsScript, Pattern SNIFFER) throws Exception {
