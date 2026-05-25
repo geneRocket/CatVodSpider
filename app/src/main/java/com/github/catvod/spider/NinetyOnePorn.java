@@ -2,7 +2,6 @@ package com.github.catvod.spider;
 
 import android.content.Context;
 import android.text.TextUtils;
-import android.util.Base64;
 
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
@@ -13,7 +12,6 @@ import com.github.catvod.net.OkHttp;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.parser.Parser;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -33,10 +31,6 @@ import okhttp3.Response;
 public class NinetyOnePorn extends Spider {
 
     private static final String siteUrl = "https://www.91porn.com";
-    private static final Pattern SOURCE = Pattern.compile("<source\\b[^>]*\\bsrc\\s*=\\s*['\"]([^'\"]+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern VIDEO_URL = Pattern.compile("(https?://[^'\"<>\\s]+\\.(?:m3u8|mp4)(?:\\?[^'\"<>\\s]*)?)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern STRENCODE_PATTERN = Pattern.compile("strencode\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"](?:\\s*,\\s*['\"]([^'\"]*)['\"])?", Pattern.CASE_INSENSITIVE);
-    private static final Pattern STRENCODE2_PATTERN = Pattern.compile("strencode2\\s*\\(\\s*['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE);
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
     private Context context;
 
@@ -171,8 +165,7 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
-//        String script = "document.getElementsByClassName('plyr__control plyr__control--overlaid')[0].click()";
-        Pattern sniffer = Pattern.compile("http((?!http).){12,}?\\.(m3u8|mp4)\\?.*|http((?!http).){12,}\\.(m3u8|mp4)");
+        Pattern sniffer = Pattern.compile("https?://[^\\s\"'<>?]{12,}\\.(?:m3u8|mp4)(?:\\?[^\\s\"'<>]*)?", Pattern.CASE_INSENSITIVE);
         String webUrl = id;
         String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), null, sniffer);
         if (TextUtils.isEmpty(videoUrl)) return "";
@@ -260,130 +253,4 @@ public class NinetyOnePorn extends Spider {
         return siteUrl + "/" + url;
     }
 
-    private String parseSource(String html) throws Exception {
-        if (html == null || html.isEmpty()) return "";
-
-        // 1. 优先尝试解析 strencode，算法与 /js/m.js 中的 strencode 保持一致。
-        Matcher matcher = STRENCODE_PATTERN.matcher(html);
-        while (matcher.find()) {
-            try {
-                String decoded = decodeStrencode(matcher.group(1), matcher.group(2), matcher.group(3));
-                String source = extractSource(decoded);
-                if (!source.isEmpty()) return source;
-            } catch (Exception e) {
-                // 忽略当前匹配块的失败，继续尝试后续匹配
-            }
-        }
-
-        // 2. 尝试解析 strencode2，它在 /js/m2.js 中只是 JS unescape(input)。
-        matcher = STRENCODE2_PATTERN.matcher(html);
-        while (matcher.find()) {
-            try {
-                String source = extractSource(unescape(matcher.group(1)));
-                if (!source.isEmpty()) return source;
-            } catch (Exception e) {
-                // 忽略当前匹配块的失败，继续尝试后续匹配
-            }
-        }
-
-        // 3. 尝试在去除注释后的源码中直接寻找 source 标签
-        String source = extractSource(html.replaceAll("(?s)<!--.*?-->", ""));
-        if (!source.isEmpty()) return source;
-
-        // 4. 兜底策略：在全文捕获可能的 m3u8 或者 mp4 直链
-        Matcher m4 = VIDEO_URL.matcher(html);
-        if (m4.find()) return m4.group(1);
-
-        return "";
-    }
-
-    private String parseSource(String url, String html) throws Exception {
-        String source = parseSource(html);
-        if (!source.isEmpty() || context == null) return source;
-        return parseSource(fetchByWebView(url));
-    }
-
-    private String extractSource(String html) {
-        if (html == null || html.isEmpty()) return "";
-        Element source = Jsoup.parseBodyFragment(html).selectFirst("source[src]");
-        if (source != null) return source.attr("src").trim();
-        Matcher matcher = SOURCE.matcher(html);
-        if (matcher.find()) return Parser.unescapeEntities(matcher.group(1), true).trim();
-        matcher = VIDEO_URL.matcher(html);
-        return matcher.find() ? matcher.group(1).trim() : "";
-    }
-
-    private String decodeStrencode(String cipher, String key, String mode) {
-        try {
-            if (mode != null && mode.endsWith("2")) {
-                String temp = cipher;
-                cipher = key;
-                key = temp;
-            }
-            byte[] cipherBytes = Base64.decode(cipher.trim(), Base64.DEFAULT);
-            byte[] keyBytes = key.getBytes("UTF-8");
-            int keyLen = keyBytes.length;
-            byte[] xorBytes = new byte[cipherBytes.length];
-            for (int i = 0; i < cipherBytes.length; i++) {
-                int k = i % keyLen;
-                xorBytes[i] = (byte) ((cipherBytes[i] & 0xFF) ^ (keyBytes[k] & 0xFF));
-            }
-            String xorStr = new String(xorBytes, "UTF-8").trim();
-            byte[] finalBytes = Base64.decode(xorStr, Base64.DEFAULT);
-            return new String(finalBytes, "UTF-8");
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private String unescape(String src) {
-        if (src == null) return "";
-        StringBuilder tmp = new StringBuilder();
-        tmp.ensureCapacity(src.length());
-        int lastPos = 0, pos = 0;
-        char ch;
-        while (pos < src.length()) {
-            pos = src.indexOf("%", lastPos);
-            if (pos == lastPos) {
-                if (pos + 1 < src.length() && src.charAt(pos + 1) == 'u') {
-                    if (pos + 6 <= src.length()) {
-                        try {
-                            ch = (char) Integer.parseInt(src.substring(pos + 2, pos + 6), 16);
-                            tmp.append(ch);
-                            lastPos = pos + 6;
-                        } catch (NumberFormatException e) {
-                            tmp.append(src.substring(pos, pos + 2));
-                            lastPos = pos + 2;
-                        }
-                    } else {
-                        tmp.append(src.substring(pos));
-                        lastPos = src.length();
-                    }
-                } else {
-                    if (pos + 3 <= src.length()) {
-                        try {
-                            ch = (char) Integer.parseInt(src.substring(pos + 1, pos + 3), 16);
-                            tmp.append(ch);
-                            lastPos = pos + 3;
-                        } catch (NumberFormatException e) {
-                            tmp.append(src.substring(pos, pos + 1));
-                            lastPos = pos + 1;
-                        }
-                    } else {
-                        tmp.append(src.substring(pos));
-                        lastPos = src.length();
-                    }
-                }
-            } else {
-                if (pos == -1) {
-                    tmp.append(src.substring(lastPos));
-                    lastPos = src.length();
-                } else {
-                    tmp.append(src.substring(lastPos, pos));
-                    lastPos = pos;
-                }
-            }
-        }
-        return tmp.toString();
-    }
 }
