@@ -18,7 +18,9 @@ import com.github.catvod.net.OkHttp;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -43,15 +45,38 @@ public class WebViewVIdeoUrlSpider {
 
     Handler mainHandler;
 
+    // 用于保存多个符合条件的视频候选
+    private final List<VideoCandidate> candidates = new ArrayList<>();
+    private final Handler delayHandler = new Handler(Looper.getMainLooper());
+    private final Runnable countDownRunnable = () -> {
+        if (latch != null) {
+            latch.countDown();
+        }
+    };
+
+    // 候选实体类
+    public static class VideoCandidate {
+        private final String url;
+        private final Map<String, String> headers;
+        private final long contentLength;
+
+        public VideoCandidate(String url, Map<String, String> headers, long contentLength) {
+            this.url = url;
+            this.headers = headers;
+            this.contentLength = contentLength;
+        }
+
+        public String getUrl() { return url; }
+        public Map<String, String> getHeaders() { return headers; }
+        public long getContentLength() { return contentLength; }
+    }
 
     public WebViewVIdeoUrlSpider(Context context) {
         this.context = context;
     }
 
     public void createInitWebView(Context context) {
-
         webView = new WebView(context);
-        // 启用 JS
         WebSettings settings = webView.getSettings();
         settings.setSupportZoom(true);
         settings.setUseWideViewPort(true);
@@ -68,7 +93,6 @@ public class WebViewVIdeoUrlSpider {
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         settings.setLoadsImagesAutomatically(false);
 
-
         webView.setWebViewClient(new WebViewClient() {
 
             @Override
@@ -79,19 +103,7 @@ public class WebViewVIdeoUrlSpider {
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
-                    if (SNIFFER.matcher(url).find()) {
-                        videoUrl = url;
-                        videoHeaders.clear();
-                        videoHeaders.putAll(request.getRequestHeaders());
-                        putCookie(url);
-                        putCookie(webUrl);
-                        latch.countDown();
-                    }
-
-
                     Request.Builder builder = new Request.Builder().url(url);
-
-                    // 设置请求头
                     for (Map.Entry<String, String> header : request.getRequestHeaders().entrySet()) {
                         builder.addHeader(header.getKey(), header.getValue());
                     }
@@ -102,18 +114,28 @@ public class WebViewVIdeoUrlSpider {
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
+                    // 拦截符合规则的视频流请求
+                    if (SNIFFER.matcher(url).find()) {
+                        long contentLength = 0;
+                        String lenStr = response.header("Content-Length");
+                        if (lenStr != null) {
+                            try {
+                                contentLength = Long.parseLong(lenStr);
+                            } catch (NumberFormatException ignored) {}
+                        }
+                        addCandidate(url, request.getRequestHeaders(), contentLength);
+                    }
+
                     ResponseBody body = response.body();
                     if (body == null) {
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
-                    // 获取Content-Type 和 encoding
                     String contentType = response.header("Content-Type", "text/plain");
                     String mimeType = getMimeTypeFromContentType(contentType);
                     String encoding = getEncodingFromContentType(contentType);
 
                     InputStream inputStream = body.byteStream();
-
                     return new WebResourceResponse(mimeType, encoding, inputStream);
                 } catch (Exception e) {
                     Log.e("webview", "shouldInterceptRequest error", e);
@@ -139,7 +161,6 @@ public class WebViewVIdeoUrlSpider {
                 return "utf-8";
             }
 
-
             @Override
             @SuppressLint("WebViewClientOnReceivedSslError")
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
@@ -154,20 +175,46 @@ public class WebViewVIdeoUrlSpider {
             @Override
             public void onPageFinished(WebView view, String url) {
                 mainHandler.post(() -> {
-                    webView.evaluateJavascript(
-                            jsScript, null
-                    );
+                    webView.evaluateJavascript(jsScript, null);
                 });
             }
         });
-
     }
 
+    private void addCandidate(String url, Map<String, String> requestHeaders, long contentLength) {
+        synchronized (candidates) {
+            for (VideoCandidate c : candidates) {
+                if (c.getUrl().equals(url)) {
+                    return; // 避免重复添加
+                }
+            }
+            Map<String, String> headers = new HashMap<>(requestHeaders);
+            putCookie(url, headers);
+            putCookie(webUrl, headers);
+            candidates.add(new VideoCandidate(url, headers, contentLength));
+        }
+
+        // 如果检测到文件大小大于 10MB，基本可以断定这是我们需要的完整视频，立即结束等待
+        if (contentLength > 10 * 1024 * 1024) {
+            if (latch != null) {
+                latch.countDown();
+            }
+        } else {
+            // 如果大小未知或较小（如可能为预览片、广告等），延时 1.5 秒再关闭，允许后续其他可能的视频请求进来
+            triggerDelayedCountDown();
+        }
+    }
+
+    private void triggerDelayedCountDown() {
+        delayHandler.removeCallbacks(countDownRunnable);
+        delayHandler.postDelayed(countDownRunnable, 1500);
+    }
 
     public String getVideoUrl(String webUrl, Map<String, String> header, String jsScript, Pattern SNIFFER) throws Exception {
         this.webUrl = webUrl;
         this.jsScript = jsScript;
         this.SNIFFER = SNIFFER;
+        this.candidates.clear();
 
         mainHandler = new Handler(Looper.getMainLooper());
         latch = new CountDownLatch(1);
@@ -175,21 +222,66 @@ public class WebViewVIdeoUrlSpider {
             createInitWebView(context);
             webView.loadUrl(webUrl, header);
         });
-        // 加载目标网页
+
         latch.await(20, TimeUnit.SECONDS);
 
         mainHandler.post(() -> {
-            webView.destroy();
+            delayHandler.removeCallbacks(countDownRunnable);
+            if (webView != null) {
+                webView.destroy();
+            }
         });
 
-        return videoUrl;
+        // 从收集到的候选中挑选出最合适的一个
+        VideoCandidate bestCandidate = selectBestCandidate();
+        if (bestCandidate != null) {
+            this.videoUrl = bestCandidate.getUrl();
+            this.videoHeaders.clear();
+            this.videoHeaders.putAll(bestCandidate.getHeaders());
+            return this.videoUrl;
+        }
+
+        return null;
     }
 
-    private void putCookie(String url) {
+    // 筛选策略：优先排除带有预览字样的链接，在此基础上选择 Content-Length 最大的链接
+    private VideoCandidate selectBestCandidate() {
+        synchronized (candidates) {
+            if (candidates.isEmpty()) {
+                return null;
+            }
+
+            VideoCandidate best = null;
+            for (VideoCandidate candidate : candidates) {
+                String url = candidate.getUrl().toLowerCase();
+                // 排除带有 preview、short 等可能是预览片或非目标片段的链接
+                if (url.contains("preview") || url.contains("short")) {
+                    continue;
+                }
+
+                if (best == null || candidate.getContentLength() > best.getContentLength()) {
+                    best = candidate;
+                }
+            }
+
+            // 如果排除之后没有剩余选项，则直接从所有候选里选取文件最大的一个
+            if (best == null) {
+                for (VideoCandidate candidate : candidates) {
+                    if (best == null || candidate.getContentLength() > best.getContentLength()) {
+                        best = candidate;
+                    }
+                }
+            }
+
+            return best;
+        }
+    }
+
+    private void putCookie(String url, Map<String, String> headers) {
         String cookie = CookieManager.getInstance().getCookie(url);
         if (cookie == null || cookie.isEmpty()) return;
-        String old = videoHeaders.get("Cookie");
-        videoHeaders.put("Cookie", old == null || old.isEmpty() ? cookie : old + "; " + cookie);
+        String old = headers.get("Cookie");
+        headers.put("Cookie", old == null || old.isEmpty() ? cookie : old + "; " + cookie);
     }
 
     public Map<String, String> getVideoHeaders() {
