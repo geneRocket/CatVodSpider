@@ -12,6 +12,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
+import java.io.IOException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -19,8 +20,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import okhttp3.Headers;
+import okhttp3.Request;
+import okhttp3.Response;
 
 public class NinetyOnePorn extends Spider {
 
@@ -56,7 +62,18 @@ public class NinetyOnePorn extends Spider {
     }
 
     private String fetch(String url) {
-        return OkHttp.string(url, getHeaders());
+        Request request = new Request.Builder().url(url).headers(Headers.of(getHeaders())).build();
+        try (Response response = OkHttp.client().newBuilder()
+                .callTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .build()
+                .newCall(request)
+                .execute()) {
+            return response.body() == null ? "" : response.body().string();
+        } catch (IOException e) {
+            return "";
+        }
     }
 
     @Override
