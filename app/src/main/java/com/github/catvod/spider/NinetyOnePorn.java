@@ -105,7 +105,8 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String url = ids.get(0);
-        Document doc = Jsoup.parse(fetch(url));
+        String htmlSource=fetch(url);
+        Document doc = Jsoup.parse(htmlSource);
 
         Element title = doc.selectFirst("h4.login_register_header, h4, .video-title, title");
         String name = title == null ? "" : title.text().replace("收藏", "").trim();
@@ -129,7 +130,7 @@ public class NinetyOnePorn extends Spider {
         vod.setVodActor(actor);
         vod.setVodContent(content);
         vod.setVodPlayFrom("91Porn");
-        vod.setVodPlayUrl(url);
+        vod.setVodPlayUrl("播放$"+parseSource(htmlSource));
         return Result.string(vod);
     }
 
