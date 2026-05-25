@@ -121,8 +121,6 @@ public class NinetyOnePorn extends Spider {
         Element contentEl = doc.selectFirst("#v_desc, .video-desc, .description");
         String content = contentEl != null ? contentEl.text().trim() : "";
 
-        String playUrl = parseSource(doc.html());
-
         Vod vod = new Vod();
         vod.setVodId(url);
         vod.setVodName(name);
@@ -131,7 +129,7 @@ public class NinetyOnePorn extends Spider {
         vod.setVodActor(actor);
         vod.setVodContent(content);
         vod.setVodPlayFrom("91Porn");
-        vod.setVodPlayUrl("播放$" + playUrl);
+        vod.setVodPlayUrl("播放$" + url);
         return Result.string(vod);
     }
 
@@ -148,9 +146,10 @@ public class NinetyOnePorn extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
+        String url = id.contains("view_video") ? parseSource(fetch(id)) : id;
         HashMap<String, String> headers = getHeaders();
-        headers.put("Referer", siteUrl + "/");
-        return Result.get().url(id).header(headers).string();
+        headers.put("Referer", id.contains("view_video") ? id : siteUrl + "/");
+        return Result.get().url(url).header(headers).string();
     }
 
     private List<Vod> parseList(String html) {
