@@ -7,26 +7,19 @@ import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
-import com.github.catvod.net.OkHttp;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-import java.io.IOException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import okhttp3.Headers;
-import okhttp3.Request;
-import okhttp3.Response;
 
 public class NinetyOnePorn extends Spider {
 
@@ -65,23 +58,7 @@ public class NinetyOnePorn extends Spider {
     }
 
     private String fetch(String url) {
-        Request request = new Request.Builder().url(url).headers(Headers.of(getHeaders())).build();
-        try (Response response = OkHttp.client().newBuilder()
-                .callTimeout(15, TimeUnit.SECONDS)
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
-                .build()
-                .newCall(request)
-                .execute()) {
-            String html = response.body() == null ? "" : response.body().string();
-            return isChallenge(html) ? fetchByWebView(url) : html;
-        } catch (IOException e) {
-            return "";
-        }
-    }
-
-    private boolean isChallenge(String html) {
-        return html != null && (html.contains("cf-mitigated") || html.contains("_cf_chl_opt") || html.contains("Just a moment"));
+        return fetchByWebView(url) ;
     }
 
     private String fetchByWebView(String url) {
@@ -166,7 +143,10 @@ public class NinetyOnePorn extends Spider {
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
         String script = "document.getElementsByClassName('vjs-big-play-button')[0].click()";
-        Pattern sniffer =  Pattern.compile("^https?://la\\.btc620\\.com/+(mp4\\d+)/(\\d+)\\.mp4\\?st=[a-zA-Z0-9_-]+&e=\\d+&f=[a-zA-Z0-9_-]+$",Pattern.CASE_INSENSITIVE);
+        Pattern sniffer = Pattern.compile(
+                "^https?://[^\\s\"'<>]+\\.mp4(?:\\?[^\\s\"'<>]*)?$",
+                Pattern.CASE_INSENSITIVE
+        );
         String webUrl = id;
         String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), script, sniffer);
         if (TextUtils.isEmpty(videoUrl)) return "";
