@@ -7,19 +7,26 @@ import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
+import com.github.catvod.net.OkHttp;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import okhttp3.Headers;
+import okhttp3.Request;
+import okhttp3.Response;
 
 public class NinetyOnePorn extends Spider {
 
@@ -58,7 +65,23 @@ public class NinetyOnePorn extends Spider {
     }
 
     private String fetch(String url) {
-        return fetchByWebView(url) ;
+        Request request = new Request.Builder().url(url).headers(Headers.of(getHeaders())).build();
+        try (Response response = OkHttp.client().newBuilder()
+                .callTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .build()
+                .newCall(request)
+                .execute()) {
+            String html = response.body() == null ? "" : response.body().string();
+            return isChallenge(html) ? fetchByWebView(url) : html;
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private boolean isChallenge(String html) {
+        return html != null && (html.contains("cf-mitigated") || html.contains("_cf_chl_opt") || html.contains("Just a moment"));
     }
 
     private String fetchByWebView(String url) {
