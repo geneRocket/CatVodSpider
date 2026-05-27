@@ -67,8 +67,9 @@ public class NinetyOnePorn extends Spider {
         return headers;
     }
 
-    private String fetch(String url) {
-        Request request = new Request.Builder().url(url).headers(Headers.of(getHeaders())).build();
+    private FetchResult fetch(String url) {
+        HashMap<String, String> headers = getHeaders();
+        Request request = new Request.Builder().url(url).headers(Headers.of(headers)).build();
         try (Response response = OkHttp.client().newBuilder()
                 .callTimeout(15, TimeUnit.SECONDS)
                 .connectTimeout(10, TimeUnit.SECONDS)
@@ -77,22 +78,30 @@ public class NinetyOnePorn extends Spider {
                 .newCall(request)
                 .execute()) {
             String html = response.body() == null ? "" : response.body().string();
-            return isChallenge(html) ? fetchByWebView(url) : html;
+            return isChallenge(html) ? fetchByWebView(url, headers) : new FetchResult(html, headers);
         } catch (IOException e) {
-            return "";
+            return new FetchResult("", headers);
         }
+    }
+
+    private String fetchHtml(String url) {
+        return fetch(url).html;
     }
 
     private boolean isChallenge(String html) {
         return html != null && (html.contains("cf-mitigated") || html.contains("_cf_chl_opt") || html.contains("Just a moment"));
     }
 
-    private String fetchByWebView(String url) {
-        if (context == null) return "";
+    private FetchResult fetchByWebView(String url, HashMap<String, String> headers) {
+        if (context == null) return new FetchResult("", headers);
         try {
-            return new WebViewSpider(context).getHtmlSource(url, getHeaders());
+            WebViewSpider webViewSpider = new WebViewSpider(context);
+            String html = webViewSpider.getHtmlSource(url, headers);
+            HashMap<String, String> webHeaders = new HashMap<>(headers);
+            webHeaders.putAll(webViewSpider.getHeaders());
+            return new FetchResult(html, webHeaders);
         } catch (Exception e) {
-            return "";
+            return new FetchResult("", headers);
         }
     }
 
@@ -116,7 +125,7 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         String url = getCategoryUrl(tid, pg);
-        String html = fetch(url);
+        String html = fetchHtml(url);
         List<Vod> list = parseList(html);
         int page = parsePage(pg);
         int pageCount = parsePageCount(html, page);
@@ -126,7 +135,7 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String url = ids.get(0);
-        String htmlSource = fetch(url);
+        String htmlSource = fetchHtml(url);
         Document doc = Jsoup.parse(htmlSource);
 
         String name = firstText(doc, "meta[property=og:title], h4.login_register_header, #viewvideo-title, .video-title, h4, title")
@@ -166,22 +175,21 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String searchContent(String key, boolean quick, String pg) throws Exception {
         String url = siteUrl + "/search_result.php?search_id=" + URLEncoder.encode(key, "UTF-8") + "&search_type=search_videos&page=" + pg;
-        return Result.string(parseList(fetch(url)));
+        return Result.string(parseList(fetchHtml(url)));
     }
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         String webUrl = id;
-        HashMap<String, String> headers = getHeaders();
-        String videoUrl = "";
-        WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = null;
-        if (context != null) {
-            webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
+        FetchResult result = fetch(webUrl);
+        HashMap<String, String> headers = result.headers;
+        String videoUrl = parseVideoUrl(result.html);
+        if (TextUtils.isEmpty(videoUrl) && context != null) {
+            WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
             videoUrl = webViewVIdeoUrlSpider.getVideoUrlByScript(webUrl, headers, getPlayScript(), getVideoUrlScript());
+            if (!TextUtils.isEmpty(videoUrl)) headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
         }
-        if (TextUtils.isEmpty(videoUrl)) videoUrl = parseVideoUrl(fetch(webUrl));
         if (TextUtils.isEmpty(videoUrl)) return "";
-        if (webViewVIdeoUrlSpider != null) headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
         headers.put("Referer", webUrl);
         headers.put("Origin", siteUrl);
         return Result.get().url(videoUrl).header(headers).string();
@@ -361,6 +369,16 @@ public class NinetyOnePorn extends Spider {
         if (url.startsWith("http")) return url;
         if (url.startsWith("/")) return siteUrl + url;
         return siteUrl + "/" + url;
+    }
+
+    private static class FetchResult {
+        private final String html;
+        private final HashMap<String, String> headers;
+
+        private FetchResult(String html, HashMap<String, String> headers) {
+            this.html = html == null ? "" : html;
+            this.headers = new HashMap<>(headers);
+        }
     }
 
 }

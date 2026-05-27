@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.webkit.SslErrorHandler;
+import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -19,6 +20,7 @@ import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +35,8 @@ public class WebViewSpider {
     WebView webView;
     CountDownLatch latch;
     String htmlSource;
+    String webUrl;
+    Map<String, String> webHeaders = new HashMap<>();
 
     Handler mainHandler;
 
@@ -68,6 +72,12 @@ public class WebViewSpider {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 try {
+                    if (url.equals(webUrl)) {
+                        webHeaders.clear();
+                        webHeaders.putAll(request.getRequestHeaders());
+                        putCookie(url);
+                    }
+
                     if (url.matches(".*\\.(css|woff|woff2|ttf|otf|eot|svg|mp4|webm|avi|gif)$")) {
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
@@ -136,6 +146,8 @@ public class WebViewSpider {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                putCookie(url);
+                putCookie(webUrl);
                 execJsGetSource(false, () -> {
                     latch.countDown();
                 });
@@ -173,6 +185,10 @@ public class WebViewSpider {
 
     public String getHtmlSource(String webUrl, Map<String, String> header) throws Exception {
 
+        this.webUrl = webUrl;
+        this.htmlSource = "";
+        this.webHeaders.clear();
+        this.webHeaders.putAll(header);
         mainHandler = new Handler(Looper.getMainLooper());
         latch = new CountDownLatch(1);
         mainHandler.post(() -> {
@@ -189,5 +205,17 @@ public class WebViewSpider {
         });
 
         return htmlSource;
+    }
+
+    private void putCookie(String url) {
+        if (url == null || url.isEmpty()) return;
+        String cookie = CookieManager.getInstance().getCookie(url);
+        if (cookie == null || cookie.isEmpty()) return;
+        String old = webHeaders.get("Cookie");
+        webHeaders.put("Cookie", old == null || old.isEmpty() ? cookie : old + "; " + cookie);
+    }
+
+    public Map<String, String> getHeaders() {
+        return webHeaders;
     }
 }
