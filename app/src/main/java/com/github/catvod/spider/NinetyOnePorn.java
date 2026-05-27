@@ -261,8 +261,8 @@ public class NinetyOnePorn extends Spider {
 
     private Elements getListItems(Document doc) {
         Element root = getListRoot(doc);
-        Elements items = root.select("div.col-lg-3 > div.well.well-sm");
-        return items.isEmpty() ? root.select("div.well.well-sm, div.list-channel, div.video-box") : items;
+        Elements items = root.select("div.well.well-sm:has(a[href*=view_video])");
+        return items.isEmpty() ? root.select("div.list-channel:has(a[href*=view_video]), div.video-box:has(a[href*=view_video])") : items;
     }
 
     private Element getListRoot(Document doc) {
