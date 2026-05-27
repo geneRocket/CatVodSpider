@@ -172,6 +172,8 @@ public class WebViewVIdeoUrlSpider {
         this.jsScript = jsScript;
         this.SNIFFER = SNIFFER;
         this.domId = null;
+        this.videoUrl = null;
+        this.videoHeaders.clear();
 
         mainHandler = new Handler(Looper.getMainLooper());
         latch = new CountDownLatch(1);
@@ -194,6 +196,8 @@ public class WebViewVIdeoUrlSpider {
         this.jsScript = null;
         this.SNIFFER = null;
         this.domId = domId;
+        this.videoUrl = null;
+        this.videoHeaders.clear();
 
         mainHandler = new Handler(Looper.getMainLooper());
         latch = new CountDownLatch(1);
@@ -223,7 +227,11 @@ public class WebViewVIdeoUrlSpider {
                 latch.countDown();
                 return;
             }
-            if (retry < 19) mainHandler.postDelayed(() -> evaluateVideoUrlByDomId(retry + 1), 1000);
+            if (retry < 19) {
+                mainHandler.postDelayed(() -> evaluateVideoUrlByDomId(retry + 1), 1000);
+            } else {
+                latch.countDown();
+            }
         }));
     }
 
@@ -232,11 +240,14 @@ public class WebViewVIdeoUrlSpider {
         return "(function(){"
                 + "var el=document.getElementById('" + safeDomId + "');"
                 + "if(!el)return '';"
-                + "var url=el.currentSrc||el.src||el.href||el.getAttribute('src')||el.getAttribute('data-src')||el.getAttribute('data-original')||'';"
-                + "if(!url&&el.querySelector){var source=el.querySelector('source[src],video[src],a[href]');if(source)url=source.currentSrc||source.src||source.href||source.getAttribute('src')||source.getAttribute('href')||'';}"
-                + "if(!url&&el.parentElement&&el.parentElement.querySelector){var peer=el.parentElement.querySelector('video source[src],video[src],source[src]');if(peer)url=peer.currentSrc||peer.src||peer.getAttribute('src')||'';}"
-                + "if(!url)return '';"
-                + "var a=document.createElement('a');a.href=url;return a.href;"
+                + "function abs(url){if(!url)return '';var a=document.createElement('a');a.href=url;return a.href;}"
+                + "function valid(url){url=abs(url);return /\\.(mp4|m3u8)(\\?|#|$)/i.test(url)&&!/kwai\\.net|ad-i18n-dsp|preroll/i.test(url)?url:'';}"
+                + "function pick(nodes,props){for(var i=0;i<nodes.length;i++){for(var j=0;j<props.length;j++){var url=valid(nodes[i].getAttribute(props[j]));if(url)return url;}}return '';}"
+                + "var url='';"
+                + "if(el.querySelectorAll){url=pick(el.querySelectorAll('source[src]'),['src'])||pick(el.querySelectorAll('video[src]'),['src']);}"
+                + "url=url||valid(el.getAttribute('src'))||valid(el.getAttribute('data-src'))||valid(el.getAttribute('data-original'));"
+                + "if(!url&&el.querySelectorAll){var videos=el.querySelectorAll('video');for(var i=0;i<videos.length;i++){url=valid(videos[i].currentSrc)||valid(videos[i].src);if(url)return url;}}"
+                + "return url||valid(el.currentSrc)||valid(el.src);"
                 + "})();";
     }
 
