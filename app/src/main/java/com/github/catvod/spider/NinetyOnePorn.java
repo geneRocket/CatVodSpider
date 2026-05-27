@@ -12,6 +12,7 @@ import com.github.catvod.net.OkHttp;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -30,8 +31,8 @@ import okhttp3.Response;
 
 public class NinetyOnePorn extends Spider {
 
-    private static final String siteUrl = "https://www.91porn.com";
-    private static final String VIDEO_DOM_ID = "player_one_html5_api";
+    private static final String siteUrl = "https://91porn.com";
+    private static final String VIDEO_DOM_ID = "player_one";
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
     private Context context;
 
@@ -112,7 +113,7 @@ public class NinetyOnePorn extends Spider {
 
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
-        String url = siteUrl + "/v.php?category=" + tid + "&viewtype=basic&page=" + pg;
+        String url = getCategoryUrl(tid, pg);
         String html = fetch(url);
         List<Vod> list = parseList(html);
         int page = parsePage(pg);
@@ -180,10 +181,8 @@ public class NinetyOnePorn extends Spider {
         List<Vod> list = new ArrayList<>();
         HashSet<String> parsedUrls = new HashSet<>();
         Document doc = Jsoup.parse(html);
-        for (Element element : doc.select("div.well.well-sm, div.list-channel, div.video-box")) {
-            if (element.classNames().contains("col-lg-8")) continue;
-            Element parent = element.parent();
-            if (parent != null && parent.classNames().contains("col-lg-8")) continue;
+        for (Element element : getListItems(doc)) {
+            if (isSidebarItem(element)) continue;
             Element a = element.selectFirst("a[href*=view_video]");
             if (a == null) continue;
 
@@ -227,6 +226,27 @@ public class NinetyOnePorn extends Spider {
         return list;
     }
 
+    private Elements getListItems(Document doc) {
+        Element root = getListRoot(doc);
+        Elements items = root.select("div.col-lg-8 > div.well.well-sm");
+        return items.isEmpty() ? root.select("div.well.well-sm, div.list-channel, div.video-box") : items;
+    }
+
+    private Element getListRoot(Document doc) {
+        Element root = doc.selectFirst(".container-minheight > .row");
+        return root == null ? doc : root;
+    }
+
+    private boolean isSidebarItem(Element element) {
+        Element col = element.parent();
+        while (col != null && !col.tagName().equals("body")) {
+            if (col.hasClass("col-md-8") || col.hasClass("col-lg-8") || col.hasClass("col-ms-8")) return false;
+            if (col.hasClass("col-md-4") || col.hasClass("col-lg-4") || col.hasClass("col-ms-4")) return true;
+            col = col.parent();
+        }
+        return false;
+    }
+
     private String parseDate(String text) {
         Matcher matcher = DATE.matcher(text);
         return matcher.find() ? matcher.group(1) : "";
@@ -245,6 +265,12 @@ public class NinetyOnePorn extends Spider {
         Matcher matcher = Pattern.compile("[?&]page=(\\d+)").matcher(html);
         while (matcher.find()) count = Math.max(count, parsePage(matcher.group(1)));
         return count;
+    }
+
+    private String getCategoryUrl(String tid, String pg) {
+        if (tid.startsWith("http")) return tid + (tid.contains("?") ? "&" : "?") + "page=" + pg;
+        if (tid.contains("=")) return siteUrl + "/v.php?" + tid + "&page=" + pg;
+        return siteUrl + "/v.php?category=" + tid + "&viewtype=basic&page=" + pg;
     }
 
     private String fixUrl(String url) {
