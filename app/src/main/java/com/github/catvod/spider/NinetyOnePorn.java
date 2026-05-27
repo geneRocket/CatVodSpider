@@ -12,6 +12,7 @@ import com.github.catvod.net.OkHttp;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
@@ -33,8 +34,9 @@ import okhttp3.Response;
 public class NinetyOnePorn extends Spider {
 
     private static final String siteUrl = "https://91porn.com";
-    private static final String VIDEO_DOM_ID = "player_one_html5_api";
+    private static final String[] VIDEO_DOM_IDS = {"player_one_html5_api", "player_one"};
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
+    private static final Pattern VIDEO_URL = Pattern.compile("https?://[^\"'<>\\s]+?\\.(?:mp4|m3u8)(?:\\?[^\"'<>\\s]*)?", Pattern.CASE_INSENSITIVE);
     private Context context;
 
     @Override
@@ -201,8 +203,9 @@ public class NinetyOnePorn extends Spider {
 
     private String getVideoUrlScript() {
         return "(function(){"
-                + "var el=document.getElementById('" + VIDEO_DOM_ID + "');"
-                + "var roots=[];if(el)roots.push(el);roots.push(document);"
+                + "var ids=['player_one_html5_api','player_one'];"
+                + "var roots=[];for(var n=0;n<ids.length;n++){var el=document.getElementById(ids[n]);if(el)roots.push(el);}"
+                + "roots.push(document);"
                 + "function abs(url){if(!url)return '';var a=document.createElement('a');a.href=url;return a.href;}"
                 + "function valid(url){url=abs(url);return /\\.(mp4|m3u8)(\\?|#|$)/i.test(url)&&!/kwai\\.net|ad-i18n-dsp|preroll/i.test(url)?url:'';}"
                 + "for(var r=0;r<roots.length;r++){var root=roots[r];"
@@ -314,7 +317,7 @@ public class NinetyOnePorn extends Spider {
         if (url.isEmpty()) url = firstAttr(doc, "video[data-src], source[data-src]", "data-src");
         if (url.isEmpty()) url = parseEncodedSource(html);
         if (url.isEmpty()) {
-            Matcher matcher = Pattern.compile("https?://[^\"'<>\\s]+?\\.(?:mp4|m3u8)(?:\\?[^\"'<>\\s]*)?", Pattern.CASE_INSENSITIVE).matcher(html);
+            Matcher matcher = VIDEO_URL.matcher(html);
             while (matcher.find()) {
                 url = matcher.group();
                 if (!isAdUrl(url)) break;
@@ -327,19 +330,44 @@ public class NinetyOnePorn extends Spider {
     private String parseEncodedSource(String html) {
         Matcher matcher = Pattern.compile("strencode2\\([\"']([^\"']+)[\"']\\)").matcher(html);
         while (matcher.find()) {
-            String decoded = "";
+            for (String decoded : decodeCandidates(matcher.group(1))) {
+                String url = parseSourceFromFragment(decoded);
+                if (!url.isEmpty()) return url;
+            }
+        }
+        return "";
+    }
+
+    private List<String> decodeCandidates(String encoded) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(encoded);
+        String decoded = encoded;
+        for (int i = 0; i < 2; i++) {
             try {
-                decoded = URLDecoder.decode(matcher.group(1), "UTF-8");
+                decoded = URLDecoder.decode(decoded, "UTF-8");
+                candidates.add(decoded);
             } catch (Exception ignored) {
+                break;
             }
-            Document doc = Jsoup.parse(decoded);
-            String url = firstAttr(doc, "source[src], video[src]", "src");
-            if (!url.isEmpty() && !isAdUrl(url)) return url;
-            Matcher urlMatcher = Pattern.compile("https?://[^\"'<>\\s]+?\\.(?:mp4|m3u8)(?:\\?[^\"'<>\\s]*)?", Pattern.CASE_INSENSITIVE).matcher(decoded);
-            while (urlMatcher.find()) {
-                url = urlMatcher.group();
-                if (!isAdUrl(url)) return url;
-            }
+        }
+        int size = candidates.size();
+        for (int i = 0; i < size; i++) {
+            String value = Parser.unescapeEntities(candidates.get(i), true)
+                    .replace("\\/", "/")
+                    .replace("\\u0026", "&");
+            if (!candidates.contains(value)) candidates.add(value);
+        }
+        return candidates;
+    }
+
+    private String parseSourceFromFragment(String fragment) {
+        Document doc = Jsoup.parse(fragment);
+        String url = firstAttr(doc, "source[src], video[src]", "src");
+        if (!url.isEmpty() && !isAdUrl(url)) return url;
+        Matcher urlMatcher = VIDEO_URL.matcher(fragment);
+        while (urlMatcher.find()) {
+            url = urlMatcher.group();
+            if (!isAdUrl(url)) return url;
         }
         return "";
     }
