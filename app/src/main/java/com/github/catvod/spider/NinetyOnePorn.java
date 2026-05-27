@@ -32,7 +32,7 @@ import okhttp3.Response;
 public class NinetyOnePorn extends Spider {
 
     private static final String siteUrl = "https://91porn.com";
-    private static final String VIDEO_DOM_ID = "player_one";
+    private static final String VIDEO_DOM_ID = "player_one_html5_api";
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
     private Context context;
 

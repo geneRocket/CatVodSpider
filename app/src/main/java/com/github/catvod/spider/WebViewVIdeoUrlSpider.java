@@ -78,10 +78,6 @@ public class WebViewVIdeoUrlSpider {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 try {
-                    if (url.matches(".*\\.(css|woff|woff2|ttf|otf|eot|svg|mp4|webm|avi|gif)$")) {
-                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
-                    }
-
                     if (SNIFFER != null && SNIFFER.matcher(url).find()) {
                         videoUrl = url;
                         videoHeaders.clear();
@@ -89,6 +85,10 @@ public class WebViewVIdeoUrlSpider {
                         putCookie(url);
                         putCookie(webUrl);
                         latch.countDown();
+                    }
+
+                    if (url.matches(".*\\.(css|woff|woff2|ttf|otf|eot|svg|mp4|webm|avi|gif)$")) {
+                        return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
 
