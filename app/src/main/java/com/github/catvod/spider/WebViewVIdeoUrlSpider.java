@@ -16,6 +16,8 @@ import android.webkit.WebViewClient;
 
 import com.github.catvod.net.OkHttp;
 
+import org.apache.commons.lang3.StringEscapeUtils;
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -35,6 +37,7 @@ public class WebViewVIdeoUrlSpider {
     CountDownLatch latch;
     String jsScript;
     String webUrl;
+    String domId;
 
     Pattern SNIFFER;
 
@@ -79,7 +82,7 @@ public class WebViewVIdeoUrlSpider {
                         return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("".getBytes()));
                     }
 
-                    if (SNIFFER.matcher(url).find()) {
+                    if (SNIFFER != null && SNIFFER.matcher(url).find()) {
                         videoUrl = url;
                         videoHeaders.clear();
                         videoHeaders.putAll(request.getRequestHeaders());
@@ -153,11 +156,11 @@ public class WebViewVIdeoUrlSpider {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                mainHandler.post(() -> {
-                    webView.evaluateJavascript(
-                            jsScript, null
-                    );
-                });
+                if (domId == null) {
+                    mainHandler.post(() -> webView.evaluateJavascript(jsScript, null));
+                } else {
+                    evaluateVideoUrlByDomId(0);
+                }
             }
         });
 
@@ -168,6 +171,7 @@ public class WebViewVIdeoUrlSpider {
         this.webUrl = webUrl;
         this.jsScript = jsScript;
         this.SNIFFER = SNIFFER;
+        this.domId = null;
 
         mainHandler = new Handler(Looper.getMainLooper());
         latch = new CountDownLatch(1);
@@ -183,6 +187,65 @@ public class WebViewVIdeoUrlSpider {
         });
 
         return videoUrl;
+    }
+
+    public String getVideoUrlByDomId(String webUrl, Map<String, String> header, String domId) throws Exception {
+        this.webUrl = webUrl;
+        this.jsScript = null;
+        this.SNIFFER = null;
+        this.domId = domId;
+
+        mainHandler = new Handler(Looper.getMainLooper());
+        latch = new CountDownLatch(1);
+        mainHandler.post(() -> {
+            createInitWebView(context);
+            webView.loadUrl(webUrl, header);
+        });
+        latch.await(20, TimeUnit.SECONDS);
+
+        if (videoUrl != null) {
+            putCookie(videoUrl);
+            putCookie(webUrl);
+        }
+
+        mainHandler.post(() -> {
+            webView.destroy();
+        });
+
+        return videoUrl;
+    }
+
+    private void evaluateVideoUrlByDomId(int retry) {
+        mainHandler.post(() -> webView.evaluateJavascript(buildDomVideoUrlScript(domId), result -> {
+            String url = decodeJsString(result);
+            if (url != null && !url.isEmpty()) {
+                videoUrl = url;
+                latch.countDown();
+                return;
+            }
+            if (retry < 19) mainHandler.postDelayed(() -> evaluateVideoUrlByDomId(retry + 1), 1000);
+        }));
+    }
+
+    private String buildDomVideoUrlScript(String domId) {
+        String safeDomId = domId.replace("\\", "\\\\").replace("'", "\\'");
+        return "(function(){"
+                + "var el=document.getElementById('" + safeDomId + "');"
+                + "if(!el)return '';"
+                + "var url=el.currentSrc||el.src||el.href||el.getAttribute('src')||el.getAttribute('data-src')||el.getAttribute('data-original')||'';"
+                + "if(!url&&el.querySelector){var source=el.querySelector('source[src],video[src],a[href]');if(source)url=source.currentSrc||source.src||source.href||source.getAttribute('src')||source.getAttribute('href')||'';}"
+                + "if(!url&&el.parentElement&&el.parentElement.querySelector){var peer=el.parentElement.querySelector('video source[src],video[src],source[src]');if(peer)url=peer.currentSrc||peer.src||peer.getAttribute('src')||'';}"
+                + "if(!url)return '';"
+                + "var a=document.createElement('a');a.href=url;return a.href;"
+                + "})();";
+    }
+
+    private String decodeJsString(String value) {
+        if (value == null || value.equals("null")) return "";
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            return StringEscapeUtils.unescapeEcmaScript(value.substring(1, value.length() - 1));
+        }
+        return value;
     }
 
     private void putCookie(String url) {

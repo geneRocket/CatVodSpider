@@ -31,6 +31,7 @@ import okhttp3.Response;
 public class NinetyOnePorn extends Spider {
 
     private static final String siteUrl = "https://www.91porn.com";
+    private static final String VIDEO_DOM_ID = "player_one_html5_api";
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
     private Context context;
 
@@ -165,13 +166,8 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
-        String script = "document.getElementsByClassName('vjs-big-play-button')[0].click()";
-        Pattern sniffer = Pattern.compile(
-                "^https?://[^\\s\"'<>]+\\.mp4(?:\\?[^\\s\"'<>]*)?$",
-                Pattern.CASE_INSENSITIVE
-        );
         String webUrl = id;
-        String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), script, sniffer);
+        String videoUrl = webViewVIdeoUrlSpider.getVideoUrlByDomId(webUrl, getHeaders(), VIDEO_DOM_ID);
         if (TextUtils.isEmpty(videoUrl)) return "";
         HashMap<String, String> headers = getHeaders();
         headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
