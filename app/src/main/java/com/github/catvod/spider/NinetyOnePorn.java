@@ -15,6 +15,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -125,22 +126,25 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String url = ids.get(0);
-        String htmlSource=fetch(url);
+        String htmlSource = fetch(url);
         Document doc = Jsoup.parse(htmlSource);
 
-        Element title = doc.selectFirst("h4.login_register_header, h4, .video-title, title");
-        String name = title == null ? "" : title.text().replace("收藏", "").trim();
+        String name = firstText(doc, "meta[property=og:title], h4.login_register_header, #viewvideo-title, .video-title, h4, title")
+                .replace("收藏", "")
+                .replace("- 91Porn", "")
+                .trim();
 
-        Element video = doc.selectFirst("video");
-        String pic = video != null ? video.attr("poster") : "";
+        String pic = firstAttr(doc, "meta[property=og:image]", "content");
+        if (pic.isEmpty()) pic = firstAttr(doc, "video[poster]", "poster");
+        if (pic.isEmpty()) pic = firstAttr(doc, "link[rel=image_src]", "href");
+        pic = fixUrl(pic);
 
         String date = parseDate(doc.text());
 
         Element actorEl = doc.selectFirst("a[href*=uprofile.php], a[href^=author.php], .author");
         String actor = actorEl != null ? actorEl.text().trim() : "";
 
-        Element contentEl = doc.selectFirst("#v_desc, .video-desc, .description");
-        String content = contentEl != null ? contentEl.text().trim() : "";
+        String content = firstText(doc, "#v_desc, #v_desc_more, .video-desc, .description");
 
         Vod vod = new Vod();
         vod.setVodId(url);
@@ -167,12 +171,17 @@ public class NinetyOnePorn extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
         String webUrl = id;
-        String videoUrl = webViewVIdeoUrlSpider.getVideoUrlByScript(webUrl, getHeaders(), getPlayScript(), getVideoUrlScript());
-        if (TextUtils.isEmpty(videoUrl)) return "";
         HashMap<String, String> headers = getHeaders();
-        headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
+        String videoUrl = "";
+        WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = null;
+        if (context != null) {
+            webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
+            videoUrl = webViewVIdeoUrlSpider.getVideoUrlByScript(webUrl, headers, getPlayScript(), getVideoUrlScript());
+        }
+        if (TextUtils.isEmpty(videoUrl)) videoUrl = parseVideoUrl(fetch(webUrl));
+        if (TextUtils.isEmpty(videoUrl)) return "";
+        if (webViewVIdeoUrlSpider != null) headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
         headers.put("Referer", webUrl);
         headers.put("Origin", siteUrl);
         return Result.get().url(videoUrl).header(headers).string();
@@ -185,14 +194,18 @@ public class NinetyOnePorn extends Spider {
     private String getVideoUrlScript() {
         return "(function(){"
                 + "var el=document.getElementById('" + VIDEO_DOM_ID + "');"
-                + "if(!el)return '';"
+                + "var roots=[];if(el)roots.push(el);roots.push(document);"
                 + "function abs(url){if(!url)return '';var a=document.createElement('a');a.href=url;return a.href;}"
                 + "function valid(url){url=abs(url);return /\\.(mp4|m3u8)(\\?|#|$)/i.test(url)&&!/kwai\\.net|ad-i18n-dsp|preroll/i.test(url)?url:'';}"
-                + "if(el.querySelectorAll){"
-                + "var sources=el.querySelectorAll('source[src]');for(var i=0;i<sources.length;i++){var url=valid(sources[i].getAttribute('src'));if(url)return url;}"
-                + "var videos=el.querySelectorAll('video');for(var j=0;j<videos.length;j++){var url=valid(videos[j].currentSrc)||valid(videos[j].src)||valid(videos[j].getAttribute('src'));if(url)return url;}"
+                + "for(var r=0;r<roots.length;r++){var root=roots[r];"
+                + "if(root.querySelectorAll){"
+                + "var sources=root.querySelectorAll('source[src]');for(var i=0;i<sources.length;i++){var url=valid(sources[i].getAttribute('src'));if(url)return url;}"
+                + "var videos=root.querySelectorAll('video');for(var j=0;j<videos.length;j++){var url=valid(videos[j].currentSrc)||valid(videos[j].src)||valid(videos[j].getAttribute('src'))||valid(videos[j].getAttribute('data-src'));if(url)return url;}"
                 + "}"
-                + "return valid(el.currentSrc)||valid(el.src)||valid(el.getAttribute('src'))||valid(el.getAttribute('data-src'))||valid(el.getAttribute('data-original'));"
+                + "var direct=valid(root.currentSrc)||valid(root.src)||valid(root.getAttribute&&root.getAttribute('src'))||valid(root.getAttribute&&root.getAttribute('data-src'))||valid(root.getAttribute&&root.getAttribute('data-original'));"
+                + "if(direct)return direct;"
+                + "}"
+                + "return '';"
                 + "})();";
     }
 
@@ -232,6 +245,7 @@ public class NinetyOnePorn extends Spider {
                     }
                 }
             }
+            pic = fixUrl(pic);
 
             String remark = "";
             Element durationEl = element.selectFirst("span.duration, .duration");
@@ -271,6 +285,55 @@ public class NinetyOnePorn extends Spider {
         return matcher.find() ? matcher.group(1) : "";
     }
 
+    private String parseVideoUrl(String html) {
+        Document doc = Jsoup.parse(html);
+        String url = firstAttr(doc, "video source[src], video[src], source[src]", "src");
+        if (url.isEmpty()) url = firstAttr(doc, "video[data-src], source[data-src]", "data-src");
+        if (url.isEmpty()) url = parseEncodedSource(html);
+        if (url.isEmpty()) {
+            Matcher matcher = Pattern.compile("https?://[^\"'<>\\s]+?\\.(?:mp4|m3u8)(?:\\?[^\"'<>\\s]*)?", Pattern.CASE_INSENSITIVE).matcher(html);
+            while (matcher.find()) {
+                url = matcher.group();
+                if (!isAdUrl(url)) break;
+                url = "";
+            }
+        }
+        return fixUrl(url);
+    }
+
+    private String parseEncodedSource(String html) {
+        Matcher matcher = Pattern.compile("strencode2\\([\"']([^\"']+)[\"']\\)").matcher(html);
+        while (matcher.find()) {
+            String decoded = "";
+            try {
+                decoded = URLDecoder.decode(matcher.group(1), "UTF-8");
+            } catch (Exception ignored) {
+            }
+            Document doc = Jsoup.parse(decoded);
+            String url = firstAttr(doc, "source[src], video[src]", "src");
+            if (!url.isEmpty() && !isAdUrl(url)) return url;
+        }
+        return "";
+    }
+
+    private boolean isAdUrl(String url) {
+        return url.contains("kwai.net") || url.contains("ad-i18n-dsp") || url.contains("preroll");
+    }
+
+    private String firstText(Document doc, String selector) {
+        Element element = doc.selectFirst(selector);
+        if (element == null) return "";
+        String text = element.hasAttr("content") ? element.attr("content") : element.text();
+        return text == null ? "" : text.trim();
+    }
+
+    private String firstAttr(Document doc, String selector, String attr) {
+        Element element = doc.selectFirst(selector);
+        if (element == null) return "";
+        String value = element.attr(attr);
+        return value == null ? "" : value.trim();
+    }
+
     private int parsePage(String pg) {
         try {
             return Math.max(1, Integer.parseInt(pg));
@@ -293,6 +356,8 @@ public class NinetyOnePorn extends Spider {
     }
 
     private String fixUrl(String url) {
+        if (url == null || url.isEmpty()) return "";
+        if (url.startsWith("//")) return "https:" + url;
         if (url.startsWith("http")) return url;
         if (url.startsWith("/")) return siteUrl + url;
         return siteUrl + "/" + url;
