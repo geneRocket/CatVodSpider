@@ -106,6 +106,7 @@ public class NinetyOnePorn extends Spider {
         classes.add(new Class("tf", "本月收藏"));
         classes.add(new Class("rf", "最近加精"));
         classes.add(new Class("hd", "高清"));
+        classes.add(new Class("category=top&m=-1&viewtype=basic", "每月最热"));
         classes.add(new Class("md", "本月讨论"));
         classes.add(new Class("mf", "收藏最多"));
         return Result.string(classes);
@@ -168,13 +169,31 @@ public class NinetyOnePorn extends Spider {
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
         String webUrl = id;
-        String videoUrl = webViewVIdeoUrlSpider.getVideoUrlByDomId(webUrl, getHeaders(), VIDEO_DOM_ID);
+        String videoUrl = webViewVIdeoUrlSpider.getVideoUrlByScript(webUrl, getHeaders(), getPlayScript(), getVideoUrlScript());
         if (TextUtils.isEmpty(videoUrl)) return "";
         HashMap<String, String> headers = getHeaders();
         headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
         headers.put("Referer", webUrl);
         headers.put("Origin", siteUrl);
         return Result.get().url(videoUrl).header(headers).string();
+    }
+
+    private String getPlayScript() {
+        return "(function(){var btn=document.querySelector('.vjs-big-play-button');if(btn)btn.click();})();";
+    }
+
+    private String getVideoUrlScript() {
+        return "(function(){"
+                + "var el=document.getElementById('" + VIDEO_DOM_ID + "');"
+                + "if(!el)return '';"
+                + "function abs(url){if(!url)return '';var a=document.createElement('a');a.href=url;return a.href;}"
+                + "function valid(url){url=abs(url);return /\\.(mp4|m3u8)(\\?|#|$)/i.test(url)&&!/kwai\\.net|ad-i18n-dsp|preroll/i.test(url)?url:'';}"
+                + "if(el.querySelectorAll){"
+                + "var sources=el.querySelectorAll('source[src]');for(var i=0;i<sources.length;i++){var url=valid(sources[i].getAttribute('src'));if(url)return url;}"
+                + "var videos=el.querySelectorAll('video');for(var j=0;j<videos.length;j++){var url=valid(videos[j].currentSrc)||valid(videos[j].src)||valid(videos[j].getAttribute('src'));if(url)return url;}"
+                + "}"
+                + "return valid(el.currentSrc)||valid(el.src)||valid(el.getAttribute('src'))||valid(el.getAttribute('data-src'))||valid(el.getAttribute('data-original'));"
+                + "})();";
     }
 
     private List<Vod> parseList(String html) {
@@ -228,7 +247,7 @@ public class NinetyOnePorn extends Spider {
 
     private Elements getListItems(Document doc) {
         Element root = getListRoot(doc);
-        Elements items = root.select("div.col-lg-8 > div.well.well-sm");
+        Elements items = root.select("div.col-lg-3 > div.well.well-sm");
         return items.isEmpty() ? root.select("div.well.well-sm, div.list-channel, div.video-box") : items;
     }
 

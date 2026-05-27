@@ -36,8 +36,8 @@ public class WebViewVIdeoUrlSpider {
     WebView webView;
     CountDownLatch latch;
     String jsScript;
+    String resultScript;
     String webUrl;
-    String domId;
 
     Pattern SNIFFER;
 
@@ -156,10 +156,14 @@ public class WebViewVIdeoUrlSpider {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (domId == null) {
+                if (resultScript == null) {
                     mainHandler.post(() -> webView.evaluateJavascript(jsScript, null));
                 } else {
-                    evaluateVideoUrlByDomId(0);
+                    if (jsScript != null && !jsScript.isEmpty()) {
+                        mainHandler.post(() -> webView.evaluateJavascript(jsScript, value -> evaluateVideoUrlByScript(0)));
+                    } else {
+                        evaluateVideoUrlByScript(0);
+                    }
                 }
             }
         });
@@ -170,8 +174,8 @@ public class WebViewVIdeoUrlSpider {
     public String getVideoUrl(String webUrl, Map<String, String> header, String jsScript, Pattern SNIFFER) throws Exception {
         this.webUrl = webUrl;
         this.jsScript = jsScript;
+        this.resultScript = null;
         this.SNIFFER = SNIFFER;
-        this.domId = null;
         this.videoUrl = null;
         this.videoHeaders.clear();
 
@@ -191,11 +195,11 @@ public class WebViewVIdeoUrlSpider {
         return videoUrl;
     }
 
-    public String getVideoUrlByDomId(String webUrl, Map<String, String> header, String domId) throws Exception {
+    public String getVideoUrlByScript(String webUrl, Map<String, String> header, String jsScript, String resultScript) throws Exception {
         this.webUrl = webUrl;
-        this.jsScript = null;
+        this.jsScript = jsScript;
+        this.resultScript = resultScript;
         this.SNIFFER = null;
-        this.domId = domId;
         this.videoUrl = null;
         this.videoHeaders.clear();
 
@@ -219,8 +223,8 @@ public class WebViewVIdeoUrlSpider {
         return videoUrl;
     }
 
-    private void evaluateVideoUrlByDomId(int retry) {
-        mainHandler.post(() -> webView.evaluateJavascript(buildDomVideoUrlScript(domId), result -> {
+    private void evaluateVideoUrlByScript(int retry) {
+        mainHandler.post(() -> webView.evaluateJavascript(resultScript, result -> {
             String url = decodeJsString(result);
             if (url != null && !url.isEmpty()) {
                 videoUrl = url;
@@ -228,35 +232,11 @@ public class WebViewVIdeoUrlSpider {
                 return;
             }
             if (retry < 19) {
-                mainHandler.postDelayed(() -> evaluateVideoUrlByDomId(retry + 1), 1000);
+                mainHandler.postDelayed(() -> evaluateVideoUrlByScript(retry + 1), 1000);
             } else {
                 latch.countDown();
             }
         }));
-    }
-
-    private String buildDomVideoUrlScript(String domId) {
-        String safeDomId = domId.replace("\\", "\\\\").replace("'", "\\'");
-        return "(function(){"
-                + "var el=document.getElementById('" + safeDomId + "');"
-                + "if(!el)return '';"
-                + "function abs(url){if(!url)return '';var a=document.createElement('a');a.href=url;return a.href;}"
-                + "function valid(url){url=abs(url);return /\\.(mp4|m3u8)(\\?|#|$)/i.test(url)&&!/kwai\\.net|ad-i18n-dsp|preroll/i.test(url)?url:'';}"
-                + "function add(list,url){url=valid(url);if(url&&list.indexOf(url)<0)list.push(url);}"
-                + "function pureNumber(node){if(!node)return '';var v=(node.value||node.textContent||'').trim();return /^\\d{3,}$/.test(v)?v:'';}"
-                + "function pageVid(){var fav=document.querySelector('#favorite #VID');var v=pureNumber(fav);if(v)return v;var poster=(el.getAttribute('poster')||'');if(el.querySelectorAll){var media=el.querySelectorAll('video[poster],img[src]');for(var i=0;i<media.length;i++)poster+=' '+(media[i].getAttribute('poster')||media[i].getAttribute('src')||'');}var m=poster.match(/\\/(\\d+)\\.(?:jpg|png|webp)(?:\\?|\\s|$)/i);if(m)return m[1];var ids=document.querySelectorAll('#VID');for(var j=0;j<ids.length;j++){v=pureNumber(ids[j]);if(v)return v;}return '';}"
-                + "function matchVid(url,vid){return vid&&new RegExp('/'+vid+'\\\\.(mp4|m3u8)(\\\\?|#|$)','i').test(url);}"
-                + "var list=[];"
-                + "if(el.querySelectorAll){"
-                + "var sources=el.querySelectorAll('source[src]');for(var i=0;i<sources.length;i++)add(list,sources[i].getAttribute('src'));"
-                + "var videos=el.querySelectorAll('video[src]');for(var j=0;j<videos.length;j++)add(list,videos[j].getAttribute('src'));"
-                + "}"
-                + "add(list,el.getAttribute('src'));add(list,el.getAttribute('data-src'));add(list,el.getAttribute('data-original'));"
-                + "var vid=pageVid();for(var k=0;k<list.length;k++){if(matchVid(list[k],vid))return list[k];}"
-                + "if(list.length)return list[0];"
-                + "if(el.querySelectorAll){var current=el.querySelectorAll('video');for(var n=0;n<current.length;n++){var url=valid(current[n].currentSrc)||valid(current[n].src);if(matchVid(url,vid))return url;}}"
-                + "return '';"
-                + "})();";
     }
 
     private String decodeJsString(String value) {
