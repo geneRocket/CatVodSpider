@@ -221,8 +221,10 @@ public class NinetyOnePorn extends Spider {
         List<Vod> list = new ArrayList<>();
         HashSet<String> parsedUrls = new HashSet<>();
         Document doc = Jsoup.parse(html);
+        boolean hideLargeItems = hidesClass(html, "col-lg-8");
         for (Element element : getListItems(doc)) {
             if (isSidebarItem(element)) continue;
+            if (hideLargeItems && hasAncestorClass(element, "col-lg-8")) continue;
             Element a = element.selectFirst("a[href*=view_video]");
             if (a == null) continue;
 
@@ -288,6 +290,19 @@ public class NinetyOnePorn extends Spider {
         return false;
     }
 
+    private boolean hidesClass(String html, String className) {
+        return Pattern.compile("\\." + Pattern.quote(className) + "\\s*\\{[^}]*display\\s*:\\s*none", Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(html).find();
+    }
+
+    private boolean hasAncestorClass(Element element, String className) {
+        Element parent = element.parent();
+        while (parent != null && !parent.tagName().equals("body")) {
+            if (parent.hasClass(className)) return true;
+            parent = parent.parent();
+        }
+        return false;
+    }
+
     private String parseDate(String text) {
         Matcher matcher = DATE.matcher(text);
         return matcher.find() ? matcher.group(1) : "";
@@ -320,6 +335,11 @@ public class NinetyOnePorn extends Spider {
             Document doc = Jsoup.parse(decoded);
             String url = firstAttr(doc, "source[src], video[src]", "src");
             if (!url.isEmpty() && !isAdUrl(url)) return url;
+            Matcher urlMatcher = Pattern.compile("https?://[^\"'<>\\s]+?\\.(?:mp4|m3u8)(?:\\?[^\"'<>\\s]*)?", Pattern.CASE_INSENSITIVE).matcher(decoded);
+            while (urlMatcher.find()) {
+                url = urlMatcher.group();
+                if (!isAdUrl(url)) return url;
+            }
         }
         return "";
     }
