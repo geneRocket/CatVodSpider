@@ -12,11 +12,9 @@ import com.github.catvod.net.OkHttp;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,7 +34,6 @@ public class NinetyOnePorn extends Spider {
     private static final String siteUrl = "https://91porn.com";
     private static final String[] VIDEO_DOM_IDS = {"player_one_html5_api", "player_one"};
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
-    private static final Pattern VIDEO_URL = Pattern.compile("https?://[^\"'<>\\s]+?\\.(?:mp4|m3u8)(?:\\?[^\"'<>\\s]*)?", Pattern.CASE_INSENSITIVE);
     private Context context;
 
     @Override
@@ -185,7 +182,7 @@ public class NinetyOnePorn extends Spider {
         String webUrl = id;
         FetchResult result = fetch(webUrl);
         HashMap<String, String> headers = result.headers;
-        String videoUrl = parseVideoUrl(result.html);
+        String videoUrl = null;
         if (TextUtils.isEmpty(videoUrl) && context != null) {
             WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
             videoUrl = webViewVIdeoUrlSpider.getVideoUrlByScript(webUrl, headers, getPlayScript(), getVideoUrlScript());
@@ -309,72 +306,6 @@ public class NinetyOnePorn extends Spider {
     private String parseDate(String text) {
         Matcher matcher = DATE.matcher(text);
         return matcher.find() ? matcher.group(1) : "";
-    }
-
-    private String parseVideoUrl(String html) {
-        Document doc = Jsoup.parse(html);
-        String url;
-//        String url = firstAttr(doc, "video source[src], video[src], source[src]", "src");
-//        if (url.isEmpty()) url = firstAttr(doc, "video[data-src], source[data-src]", "data-src");
-        url = parseEncodedSource(html);
-//        if (url.isEmpty()) {
-//            Matcher matcher = VIDEO_URL.matcher(html);
-//            while (matcher.find()) {
-//                url = matcher.group();
-//                if (!isAdUrl(url)) break;
-//                url = "";
-//            }
-//        }
-        return fixUrl(url);
-    }
-
-    private String parseEncodedSource(String html) {
-        Matcher matcher = Pattern.compile("strencode2\\([\"']([^\"']+)[\"']\\)").matcher(html);
-        while (matcher.find()) {
-            for (String decoded : decodeCandidates(matcher.group(1))) {
-                String url = parseSourceFromFragment(decoded);
-                if (!url.isEmpty()) return url;
-            }
-        }
-        return "";
-    }
-
-    private List<String> decodeCandidates(String encoded) {
-        List<String> candidates = new ArrayList<>();
-        candidates.add(encoded);
-        String decoded = encoded;
-        for (int i = 0; i < 2; i++) {
-            try {
-                decoded = URLDecoder.decode(decoded, "UTF-8");
-                candidates.add(decoded);
-            } catch (Exception ignored) {
-                break;
-            }
-        }
-        int size = candidates.size();
-        for (int i = 0; i < size; i++) {
-            String value = Parser.unescapeEntities(candidates.get(i), true)
-                    .replace("\\/", "/")
-                    .replace("\\u0026", "&");
-            if (!candidates.contains(value)) candidates.add(value);
-        }
-        return candidates;
-    }
-
-    private String parseSourceFromFragment(String fragment) {
-        Document doc = Jsoup.parse(fragment);
-        String url = firstAttr(doc, "source[src], video[src]", "src");
-        if (!url.isEmpty() && !isAdUrl(url)) return url;
-        Matcher urlMatcher = VIDEO_URL.matcher(fragment);
-        while (urlMatcher.find()) {
-            url = urlMatcher.group();
-            if (!isAdUrl(url)) return url;
-        }
-        return "";
-    }
-
-    private boolean isAdUrl(String url) {
-        return url.contains("kwai.net") || url.contains("ad-i18n-dsp") || url.contains("preroll");
     }
 
     private String firstText(Document doc, String selector) {
