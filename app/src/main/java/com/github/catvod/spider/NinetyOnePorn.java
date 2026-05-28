@@ -313,17 +313,18 @@ public class NinetyOnePorn extends Spider {
 
     private String parseVideoUrl(String html) {
         Document doc = Jsoup.parse(html);
-        String url = firstAttr(doc, "video source[src], video[src], source[src]", "src");
-        if (url.isEmpty()) url = firstAttr(doc, "video[data-src], source[data-src]", "data-src");
-        if (url.isEmpty()) url = parseEncodedSource(html);
-        if (url.isEmpty()) {
-            Matcher matcher = VIDEO_URL.matcher(html);
-            while (matcher.find()) {
-                url = matcher.group();
-                if (!isAdUrl(url)) break;
-                url = "";
-            }
-        }
+        String url;
+//        String url = firstAttr(doc, "video source[src], video[src], source[src]", "src");
+//        if (url.isEmpty()) url = firstAttr(doc, "video[data-src], source[data-src]", "data-src");
+        url = parseEncodedSource(html);
+//        if (url.isEmpty()) {
+//            Matcher matcher = VIDEO_URL.matcher(html);
+//            while (matcher.find()) {
+//                url = matcher.group();
+//                if (!isAdUrl(url)) break;
+//                url = "";
+//            }
+//        }
         return fixUrl(url);
     }
 
