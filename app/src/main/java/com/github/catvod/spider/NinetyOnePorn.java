@@ -180,12 +180,12 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String url = ids.get(0);
-        String htmlSource = fetchHtml(url);
+        String htmlSource = fetchDesktop(url).html;
         Document doc = Jsoup.parse(htmlSource);
 
         String name = firstText(doc, "meta[property=og:title], h4.login_register_header, #viewvideo-title, .video-title, h4, title")
                 .replace("收藏", "")
-                .replace("- 91Porn", "")
+                .replaceAll("(?i)\\s*-\\s*91porn\\s*$", "")
                 .trim();
 
         String pic = firstAttr(doc, "meta[property=og:image]", "content");
@@ -232,17 +232,7 @@ public class NinetyOnePorn extends Spider {
         // 1. 尝试直接解码网页 HTML 中的 strencode2，命令行和无 WebView 环境也能取到播放地址
         String videoUrl = parseVideoUrlFromHtml(result.html);
 
-        // 2. 如果直接解析失败，则回退调用 WebView
-        if (TextUtils.isEmpty(videoUrl) && context != null) {
-            WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
-            videoUrl = webViewVIdeoUrlSpider.getVideoUrlByScript(webUrl, headers, getPlayScript(), getVideoUrlScript());
-            if (TextUtils.isEmpty(videoUrl)) {
-                videoUrl = webViewVIdeoUrlSpider.getLargestVideoUrl(webUrl, headers, getPlayScript(), VIDEO_SNIFFER);
-            }
-            if (!TextUtils.isEmpty(videoUrl)) {
-                headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
-            }
-        }
+
 
         if (TextUtils.isEmpty(videoUrl)) return "";
         headers.put("Referer", webUrl);
@@ -283,91 +273,6 @@ public class NinetyOnePorn extends Spider {
         } catch (Exception e) {
             return value;
         }
-    }
-
-    private String getPlayScript() {
-        return "(function(){\n" +
-                "    var limit = 10; // 最大重试 10 次\n" +
-                "    var interval = setInterval(function() {\n" +
-                "        var btn = document.querySelector('.vjs-big-play-button');\n" +
-                "        if (btn) {\n" +
-                "            btn.click();\n" +
-                "        }\n" +
-                "        var video = document.getElementById('player_one_html5_api') || document.getElementById('player_one') || document.querySelector('video');\n" +
-                "        if (video) {\n" +
-                "            video.muted = true;\n" +
-                "            var p = video.play && video.play();\n" +
-                "            if (p && p.catch) p.catch(function(){});\n" +
-                "        }\n" +
-                "        try {\n" +
-                "            var player = window.videojs && window.videojs('player_one');\n" +
-                "            if (player) {\n" +
-                "                player.muted(true);\n" +
-                "                player.play();\n" +
-                "            }\n" +
-                "        } catch(e) {}\n" +
-                "        limit--;\n" +
-                "        if (limit <= 0) {\n" +
-                "            clearInterval(interval);\n" +
-                "        }\n" +
-                "    }, 300);\n" +
-                "})();";
-    }
-
-    private String getVideoUrlScript() {
-        return "(function(){\n" +
-                "    var bad = /kwai\\.net|ad-i18n-dsp|preroll/i;\n" +
-                "    function abs(url){\n" +
-                "        if(!url) return '';\n" +
-                "        var a = document.createElement('a');\n" +
-                "        a.href = url;\n" +
-                "        return a.href;\n" +
-                "    }\n" +
-                "    function valid(url){\n" +
-                "        url = (url || '').replace(/&amp;/g, '&');\n" +
-                "        url = abs(url);\n" +
-                "        return /\\.(mp4|m3u8)(\\?|#|$)/i.test(url) && !bad.test(url) ? url : '';\n" +
-                "    }\n" +
-                "    function pick(list){\n" +
-                "        if(!list) return '';\n" +
-                "        for(var i = 0; i < list.length; i++){\n" +
-                "            var item = list[i];\n" +
-                "            var url = valid(typeof item === 'string' ? item : item && item.src);\n" +
-                "            if(url) return url;\n" +
-                "        }\n" +
-                "        return '';\n" +
-                "    }\n" +
-                "    function fromVideo(video){\n" +
-                "        if(!video) return '';\n" +
-                "        var url = valid(video.currentSrc) || valid(video.src);\n" +
-                "        if(url) return url;\n" +
-                "        var sources = video.querySelectorAll ? video.querySelectorAll('source[src]') : video.getElementsByTagName('source');\n" +
-                "        for(var i = 0; i < sources.length; i++){\n" +
-                "            url = valid(sources[i].getAttribute('src') || sources[i].src);\n" +
-                "            if(url) return url;\n" +
-                "        }\n" +
-                "        return '';\n" +
-                "    }\n" +
-                "    try {\n" +
-                "        var player = window.videojs && window.videojs('player_one');\n" +
-                "        if (player) {\n" +
-                "            var current = player.currentSource && player.currentSource();\n" +
-                "            var url = valid(player.currentSrc && player.currentSrc()) || valid(current && current.src) || pick(player.currentSources && player.currentSources()) || pick(player.options_ && player.options_.sources) || fromVideo(player.tech_ && player.tech_.el_);\n" +
-                "            if (url) return url;\n" +
-                "        }\n" +
-                "    } catch(e) {}\n" +
-                "    var videos = [document.getElementById('player_one_html5_api'), document.getElementById('player_one'), document.querySelector('video')];\n" +
-                "    for (var n = 0; n < videos.length; n++) {\n" +
-                "        var url = fromVideo(videos[n]);\n" +
-                "        if (url) return url;\n" +
-                "    }\n" +
-                "    var sources = document.querySelectorAll('source[src], video[src]');\n" +
-                "    for (var i = 0; i < sources.length; i++) {\n" +
-                "        var url = valid(sources[i].getAttribute('src') || sources[i].src);\n" +
-                "        if (url) return url;\n" +
-                "    }\n" +
-                "    return '';\n" +
-                "})();";
     }
 
     private List<Vod> parseList(String html) {
