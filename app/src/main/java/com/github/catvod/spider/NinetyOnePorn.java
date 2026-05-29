@@ -15,6 +15,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -63,12 +64,15 @@ public class NinetyOnePorn extends Spider {
         headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
         headers.put("X-Forwarded-For", getRandomIp());
         // 强制中文语言，防止返回英文页面导致解析错误
-        headers.put("Cookie", "session_language=cn_CN; language=cn_CN;");
+        headers.put("Cookie", "session_language=cn_CN; language=cn_CN; mode=d;");
         return headers;
     }
 
     private FetchResult fetch(String url) {
-        HashMap<String, String> headers = getHeaders();
+        return fetch(url, getHeaders());
+    }
+
+    private FetchResult fetch(String url, HashMap<String, String> headers) {
         Request request = new Request.Builder().url(url).headers(Headers.of(headers)).build();
         try (Response response = OkHttp.client().newBuilder()
                 .callTimeout(15, TimeUnit.SECONDS)
@@ -82,6 +86,47 @@ public class NinetyOnePorn extends Spider {
         } catch (IOException e) {
             return new FetchResult("", headers);
         }
+    }
+
+    private FetchResult fetchDesktop(String url) {
+        HashMap<String, String> headers = getHeaders();
+        initDesktopSession(url, headers);
+        return fetch(url, headers);
+    }
+
+    private void initDesktopSession(String url, HashMap<String, String> headers) {
+        String changeUrl;
+        try {
+            changeUrl = siteUrl + "/change.php?mode=d&redirect=" + URLEncoder.encode(url, "UTF-8");
+        } catch (Exception e) {
+            return;
+        }
+        Request request = new Request.Builder().url(changeUrl).headers(Headers.of(headers)).build();
+        try (Response response = OkHttp.client().newBuilder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .callTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .build()
+                .newCall(request)
+                .execute()) {
+            appendCookies(headers, response.headers("Set-Cookie"));
+        } catch (IOException ignored) {
+        }
+    }
+
+    private void appendCookies(HashMap<String, String> headers, List<String> cookies) {
+        if (cookies == null || cookies.isEmpty()) return;
+        StringBuilder builder = new StringBuilder(headers.get("Cookie"));
+        for (String cookie : cookies) {
+            int end = cookie.indexOf(';');
+            String value = (end == -1 ? cookie : cookie.substring(0, end)).trim();
+            if (value.isEmpty()) continue;
+            if (builder.length() > 0 && builder.charAt(builder.length() - 1) != ';') builder.append("; ");
+            builder.append(value).append("; ");
+        }
+        headers.put("Cookie", builder.toString());
     }
 
     private String fetchHtml(String url) {
@@ -181,12 +226,11 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         String webUrl = id;
-        FetchResult result = fetch(webUrl);
+        FetchResult result = fetchDesktop(webUrl);
         HashMap<String, String> headers = result.headers;
 
-        // 1. 尝试直接通过 Java 正则表达式解码网页 HTML 中的 strencode2
-//        String videoUrl = parseVideoUrlFromHtml(result.html);
-        String videoUrl = null;
+        // 1. 尝试直接解码网页 HTML 中的 strencode2，命令行和无 WebView 环境也能取到播放地址
+        String videoUrl = parseVideoUrlFromHtml(result.html);
 
         // 2. 如果直接解析失败，则回退调用 WebView
         if (TextUtils.isEmpty(videoUrl) && context != null) {
@@ -204,6 +248,41 @@ public class NinetyOnePorn extends Spider {
         headers.put("Referer", webUrl);
         headers.put("Origin", siteUrl);
         return Result.get().url(videoUrl).header(headers).string();
+    }
+
+    private String parseVideoUrlFromHtml(String html) {
+        if (TextUtils.isEmpty(html)) return "";
+        String videoUrl = parseVideoUrlFromSources(Jsoup.parse(html));
+        if (!TextUtils.isEmpty(videoUrl)) return videoUrl;
+
+        Matcher matcher = Pattern.compile("strencode2\\([\"']([^\"']+)[\"']\\)", Pattern.CASE_INSENSITIVE).matcher(html);
+        while (matcher.find()) {
+            String decoded = decodeStrencode2(matcher.group(1));
+            videoUrl = parseVideoUrlFromSources(Jsoup.parse(decoded));
+            if (!TextUtils.isEmpty(videoUrl)) return videoUrl;
+        }
+        return "";
+    }
+
+    private String parseVideoUrlFromSources(Document doc) {
+        for (Element element : doc.select("source[src], video[src]")) {
+            String url = validVideoUrl(element.attr("src"));
+            if (!TextUtils.isEmpty(url)) return url;
+        }
+        return "";
+    }
+
+    private String validVideoUrl(String url) {
+        url = fixUrl(Jsoup.parse(url == null ? "" : url).text().replace("&amp;", "&"));
+        return VIDEO_SNIFFER.matcher(url).matches() ? url : "";
+    }
+
+    private String decodeStrencode2(String value) {
+        try {
+            return URLDecoder.decode(value, "UTF-8");
+        } catch (Exception e) {
+            return value;
+        }
     }
 
     private String getPlayScript() {
