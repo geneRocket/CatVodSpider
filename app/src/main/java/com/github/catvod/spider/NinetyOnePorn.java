@@ -33,6 +33,7 @@ public class NinetyOnePorn extends Spider {
 
     private static final String siteUrl = "https://91porn.com";
     private static final String[] VIDEO_DOM_IDS = {"player_one_html5_api", "player_one"};
+    private static final Pattern VIDEO_SNIFFER = Pattern.compile("^(?!.*(?:kwai\\.net|ad-i18n-dsp|preroll)).*\\.(?:mp4|m3u8)(?:[?#].*)?$", Pattern.CASE_INSENSITIVE);
     private static final Pattern DATE = Pattern.compile("(?:添加时间|Added)[:：]?\\s*(\\d{4}-\\d{2}-\\d{2})");
     private Context context;
 
@@ -182,10 +183,11 @@ public class NinetyOnePorn extends Spider {
         String webUrl = id;
         FetchResult result = fetch(webUrl);
         HashMap<String, String> headers = result.headers;
-        String videoUrl = null;
-        if (TextUtils.isEmpty(videoUrl) && context != null) {
+        String videoUrl = "";
+        if (context != null) {
             WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
             videoUrl = webViewVIdeoUrlSpider.getVideoUrlByScript(webUrl, headers, getPlayScript(), getVideoUrlScript());
+            if (TextUtils.isEmpty(videoUrl)) videoUrl = webViewVIdeoUrlSpider.getLargestVideoUrl(webUrl, headers, getPlayScript(), VIDEO_SNIFFER);
             if (!TextUtils.isEmpty(videoUrl)) headers.putAll(webViewVIdeoUrlSpider.getVideoHeaders());
         }
         if (TextUtils.isEmpty(videoUrl)) return "";
@@ -195,23 +197,22 @@ public class NinetyOnePorn extends Spider {
     }
 
     private String getPlayScript() {
-        return "(function(){var btn=document.querySelector('.vjs-big-play-button');if(btn)btn.click();})();";
+        return "(function(){"
+                + "var btn=document.querySelector('.vjs-big-play-button');if(btn)btn.click();"
+                + "var video=document.getElementById('player_one_html5_api')||document.getElementById('player_one')||document.querySelector('video');"
+                + "if(video){video.muted=true;var p=video.play&&video.play();if(p&&p.catch)p.catch(function(){});}"
+                + "try{var player=window.videojs&&window.videojs('player_one');if(player){player.muted(true);player.play();}}catch(e){}"
+                + "})();";
     }
 
     private String getVideoUrlScript() {
         return "(function(){"
                 + "var ids=['player_one_html5_api','player_one'];"
-                + "var roots=[];for(var n=0;n<ids.length;n++){var el=document.getElementById(ids[n]);if(el)roots.push(el);}"
-                + "roots.push(document);"
                 + "function abs(url){if(!url)return '';var a=document.createElement('a');a.href=url;return a.href;}"
                 + "function valid(url){url=abs(url);return /\\.(mp4|m3u8)(\\?|#|$)/i.test(url)&&!/kwai\\.net|ad-i18n-dsp|preroll/i.test(url)?url:'';}"
-                + "for(var r=0;r<roots.length;r++){var root=roots[r];"
-                + "if(root.querySelectorAll){"
-                + "var sources=root.querySelectorAll('source[src]');for(var i=0;i<sources.length;i++){var url=valid(sources[i].getAttribute('src'));if(url)return url;}"
-                + "var videos=root.querySelectorAll('video');for(var j=0;j<videos.length;j++){var url=valid(videos[j].currentSrc)||valid(videos[j].src)||valid(videos[j].getAttribute('src'))||valid(videos[j].getAttribute('data-src'));if(url)return url;}"
-                + "}"
-                + "var direct=valid(root.currentSrc)||valid(root.src)||valid(root.getAttribute&&root.getAttribute('src'))||valid(root.getAttribute&&root.getAttribute('data-src'))||valid(root.getAttribute&&root.getAttribute('data-original'));"
-                + "if(direct)return direct;"
+                + "try{var player=window.videojs&&window.videojs('player_one');if(player){var current=player.currentSource&&player.currentSource();var url=valid(player.currentSrc&&player.currentSrc())||valid(current&&current.src);if(url)return url;}}catch(e){}"
+                + "for(var n=0;n<ids.length;n++){var video=document.getElementById(ids[n]);if(!video)continue;"
+                + "var url=valid(video.currentSrc)||valid(video.src);if(url)return url;"
                 + "}"
                 + "return '';"
                 + "})();";

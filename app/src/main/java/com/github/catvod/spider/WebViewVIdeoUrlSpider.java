@@ -20,7 +20,9 @@ import org.apache.commons.lang3.StringEscapeUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -40,9 +42,11 @@ public class WebViewVIdeoUrlSpider {
     String webUrl;
 
     Pattern SNIFFER;
+    boolean useLargestCandidate;
 
     String videoUrl;
     Map<String, String> videoHeaders = new HashMap<>();
+    List<VideoCandidate> videoCandidates = new ArrayList<>();
 
     Handler mainHandler;
 
@@ -79,12 +83,17 @@ public class WebViewVIdeoUrlSpider {
                 String url = request.getUrl().toString();
                 try {
                     if (SNIFFER != null && SNIFFER.matcher(url).find()) {
-                        videoUrl = url;
-                        videoHeaders.clear();
-                        videoHeaders.putAll(request.getRequestHeaders());
-                        putCookie(url);
-                        putCookie(webUrl);
-                        latch.countDown();
+                        Map<String, String> headers = new HashMap<>(request.getRequestHeaders());
+                        putCookie(headers, url);
+                        putCookie(headers, webUrl);
+                        if (useLargestCandidate) {
+                            videoCandidates.add(new VideoCandidate(url, headers, getContentLength(url, headers)));
+                        } else {
+                            videoUrl = url;
+                            videoHeaders.clear();
+                            videoHeaders.putAll(headers);
+                            latch.countDown();
+                        }
                     }
 
                     if (url.matches(".*\\.(css|woff|woff2|ttf|otf|eot|svg|mp4|webm|avi|gif)$")) {
@@ -158,6 +167,7 @@ public class WebViewVIdeoUrlSpider {
             public void onPageFinished(WebView view, String url) {
                 if (resultScript == null) {
                     mainHandler.post(() -> webView.evaluateJavascript(jsScript, null));
+                    if (useLargestCandidate) mainHandler.postDelayed(() -> latch.countDown(), 8000);
                 } else {
                     if (jsScript != null && !jsScript.isEmpty()) {
                         mainHandler.post(() -> webView.evaluateJavascript(jsScript, value -> evaluateVideoUrlByScript(0)));
@@ -172,12 +182,22 @@ public class WebViewVIdeoUrlSpider {
 
 
     public String getVideoUrl(String webUrl, Map<String, String> header, String jsScript, Pattern SNIFFER) throws Exception {
+        return getVideoUrl(webUrl, header, jsScript, SNIFFER, false);
+    }
+
+    public String getLargestVideoUrl(String webUrl, Map<String, String> header, String jsScript, Pattern SNIFFER) throws Exception {
+        return getVideoUrl(webUrl, header, jsScript, SNIFFER, true);
+    }
+
+    private String getVideoUrl(String webUrl, Map<String, String> header, String jsScript, Pattern SNIFFER, boolean useLargestCandidate) throws Exception {
         this.webUrl = webUrl;
         this.jsScript = jsScript;
         this.resultScript = null;
         this.SNIFFER = SNIFFER;
+        this.useLargestCandidate = useLargestCandidate;
         this.videoUrl = null;
         this.videoHeaders.clear();
+        this.videoCandidates.clear();
 
         mainHandler = new Handler(Looper.getMainLooper());
         latch = new CountDownLatch(1);
@@ -192,6 +212,7 @@ public class WebViewVIdeoUrlSpider {
             webView.destroy();
         });
 
+        if (useLargestCandidate) useLargestCandidate();
         return videoUrl;
     }
 
@@ -200,8 +221,10 @@ public class WebViewVIdeoUrlSpider {
         this.jsScript = jsScript;
         this.resultScript = resultScript;
         this.SNIFFER = null;
+        this.useLargestCandidate = false;
         this.videoUrl = null;
         this.videoHeaders.clear();
+        this.videoCandidates.clear();
 
         mainHandler = new Handler(Looper.getMainLooper());
         latch = new CountDownLatch(1);
@@ -254,7 +277,80 @@ public class WebViewVIdeoUrlSpider {
         videoHeaders.put("Cookie", old == null || old.isEmpty() ? cookie : old + "; " + cookie);
     }
 
+    private void putCookie(Map<String, String> headers, String url) {
+        String cookie = CookieManager.getInstance().getCookie(url);
+        if (cookie == null || cookie.isEmpty()) return;
+        String old = headers.get("Cookie");
+        headers.put("Cookie", old == null || old.isEmpty() ? cookie : old + "; " + cookie);
+    }
+
+    private long getContentLength(String url, Map<String, String> headers) {
+        try (Response response = OkHttp.client().newCall(buildHeadRequest(url, headers)).execute()) {
+            long length = response.body() == null ? -1 : response.body().contentLength();
+            String contentLength = response.header("Content-Length");
+            if (contentLength != null && !contentLength.isEmpty()) length = Long.parseLong(contentLength);
+            if (length > 0) return length;
+        } catch (Exception e) {
+        }
+        try (Response response = OkHttp.client().newCall(buildRangeRequest(url, headers)).execute()) {
+            long length = parseContentRange(response.header("Content-Range"));
+            if (length > 0) return length;
+            String contentLength = response.header("Content-Length");
+            return contentLength == null || contentLength.isEmpty() ? -1 : Long.parseLong(contentLength);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private Request buildHeadRequest(String url, Map<String, String> headers) {
+        Request.Builder builder = new Request.Builder().url(url).head();
+        for (Map.Entry<String, String> header : headers.entrySet()) builder.addHeader(header.getKey(), header.getValue());
+        return builder.build();
+    }
+
+    private Request buildRangeRequest(String url, Map<String, String> headers) {
+        Request.Builder builder = new Request.Builder().url(url).get().header("Range", "bytes=0-0");
+        for (Map.Entry<String, String> header : headers.entrySet()) {
+            if (!header.getKey().equalsIgnoreCase("Range")) builder.addHeader(header.getKey(), header.getValue());
+        }
+        return builder.build();
+    }
+
+    private long parseContentRange(String contentRange) {
+        if (contentRange == null) return -1;
+        int slash = contentRange.lastIndexOf('/');
+        if (slash == -1 || slash == contentRange.length() - 1) return -1;
+        try {
+            return Long.parseLong(contentRange.substring(slash + 1));
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private void useLargestCandidate() {
+        VideoCandidate best = null;
+        for (VideoCandidate candidate : videoCandidates) {
+            if (best == null || candidate.length > best.length || (candidate.length == best.length && candidate.length < 0)) best = candidate;
+        }
+        if (best == null) return;
+        videoUrl = best.url;
+        videoHeaders.clear();
+        videoHeaders.putAll(best.headers);
+    }
+
     public Map<String, String> getVideoHeaders() {
         return videoHeaders;
+    }
+
+    private static class VideoCandidate {
+        private final String url;
+        private final Map<String, String> headers;
+        private final long length;
+
+        private VideoCandidate(String url, Map<String, String> headers, long length) {
+            this.url = url;
+            this.headers = new HashMap<>(headers);
+            this.length = length;
+        }
     }
 }
