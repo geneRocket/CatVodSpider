@@ -8,6 +8,7 @@ import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
+import com.google.gson.Gson;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -188,7 +189,7 @@ public class NinetyOnePorn extends Spider {
         String date = parseDate(doc.text());
 
         Element actorEl = doc.selectFirst("a[href*=uprofile.php], a[href^=author.php], .author");
-        String actor = actorEl != null ? actorEl.text().trim() : "";
+        String actor = getActor(actorEl);
 
         String content = firstText(doc, "#v_desc, #v_desc_more, .video-desc, .description");
 
@@ -370,6 +371,21 @@ public class NinetyOnePorn extends Spider {
         if (element == null) return "";
         String value = element.attr(attr);
         return value == null ? "" : value.trim();
+    }
+
+    private String getActor(Element actorEl) {
+        if (actorEl == null) return "";
+        String name = actorEl.text().trim();
+        if (name.isEmpty()) return "";
+        String url = getActorVideoUrl(actorEl.attr("href"));
+        return url.isEmpty() ? name : "[a=cr:" + new Gson().toJson(new Class(url, name)) + "/]" + name + "[/a]";
+    }
+
+    private String getActorVideoUrl(String href) {
+        String url = fixUrl(href);
+        Matcher matcher = Pattern.compile("[?&]UID=([^&]+)").matcher(url);
+        if (!matcher.find()) return "";
+        return siteUrl + "/uvideos.php?UID=" + matcher.group(1) + "&type=public";
     }
 
     private int parsePage(String pg) {

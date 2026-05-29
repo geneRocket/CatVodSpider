@@ -1,4 +1,5 @@
 #!/bin/bash
+bash ./gradlew assembleDebug assembleRelease
 
 set -e  # 如果有命令失败则中断脚本
 BASE_DIR="$(cd "$(dirname "$0")"; pwd)"
