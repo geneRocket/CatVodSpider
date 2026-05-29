@@ -68,10 +68,6 @@ public class NinetyOnePorn extends Spider {
         return headers;
     }
 
-    private FetchResult fetch(String url) {
-        return fetch(url, getHeaders());
-    }
-
     private FetchResult fetch(String url, HashMap<String, String> headers) {
         Request request = new Request.Builder().url(url).headers(Headers.of(headers)).build();
         try (Response response = OkHttp.client().newBuilder()
@@ -129,10 +125,6 @@ public class NinetyOnePorn extends Spider {
         headers.put("Cookie", builder.toString());
     }
 
-    private String fetchHtml(String url) {
-        return fetch(url).html;
-    }
-
     private boolean isChallenge(String html) {
         return html != null && (html.contains("cf-mitigated") || html.contains("_cf_chl_opt") || html.contains("Just a moment"));
     }
@@ -170,7 +162,7 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         String url = getCategoryUrl(tid, pg);
-        String html = fetchHtml(url);
+        String html = fetchDesktop(url).html;
         List<Vod> list = parseList(html);
         int page = parsePage(pg);
         int pageCount = parsePageCount(html, page);
@@ -220,7 +212,7 @@ public class NinetyOnePorn extends Spider {
     @Override
     public String searchContent(String key, boolean quick, String pg) throws Exception {
         String url = siteUrl + "/search_result.php?search_id=" + URLEncoder.encode(key, "UTF-8") + "&search_type=search_videos&page=" + pg;
-        return Result.string(parseList(fetchHtml(url)));
+        return Result.string(parseList(fetchDesktop(url).html));
     }
 
     @Override
