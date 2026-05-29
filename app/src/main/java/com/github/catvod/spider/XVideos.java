@@ -55,7 +55,7 @@ public class XVideos extends Spider {
         classes.add(new Class("latina", "Latina"));
         classes.add(new Class("blonde", "Blonde"));
         classes.add(new Class("long", "Long"));
-        return Result.string(classes, parseList(fetch(siteUrl + "/")));
+        return Result.string(classes);
     }
 
     @Override
