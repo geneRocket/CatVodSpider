@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
             @Override
             public List<java.net.Proxy> select(URI uri) {
                 if(uri.getHost().contains("missav")||uri.getHost().contains("91")){
-                    return Collections.singletonList(new java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress.createUnresolved("192.168.1.101", 7897)));
+                    return Collections.singletonList(new java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress.createUnresolved("192.168.1.104", 7897)));
 
                 }
                 return Collections.singletonList( java.net.Proxy.NO_PROXY);

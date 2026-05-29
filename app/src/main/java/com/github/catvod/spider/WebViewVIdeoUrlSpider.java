@@ -74,7 +74,9 @@ public class WebViewVIdeoUrlSpider {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         settings.setLoadsImagesAutomatically(false);
-
+        // 开启额外的渲染兼容参数
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
 
         webView.setWebViewClient(new WebViewClient() {
 
