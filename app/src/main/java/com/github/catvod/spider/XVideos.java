@@ -31,19 +31,38 @@ public class XVideos extends Spider {
     private static final Pattern PAGE_PATH = Pattern.compile("/(\\d+)(?:$|[?#])");
     private static final Pattern PAGE_QUERY = Pattern.compile("[?&]p=(\\d+)(?:$|&)");
 
-    private HashMap<String, String> getHeaders() {
+    // 升级为完整的现代浏览器指纹头，包含 Client Hints，可绕过大多数 WAF 签名检测
+    private HashMap<String, String> getHeaders(String referer) {
         HashMap<String, String> headers = new HashMap<>();
-        headers.put("User-Agent", Util.CHROME);
-        headers.put("Accept-Language", "en-US,en;q=0.9");
+        headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        headers.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
+        headers.put("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6");
+        headers.put("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"");
+        headers.put("Sec-Ch-Ua-Mobile", "?0");
+        headers.put("Sec-Ch-Ua-Platform", "\"Windows\"");
+        headers.put("Sec-Fetch-Dest", "document");
+        headers.put("Sec-Fetch-Mode", "navigate");
+        headers.put("Sec-Fetch-Site", "none");
+        headers.put("Sec-Fetch-User", "?1");
+        headers.put("Upgrade-Insecure-Requests", "1");
+        if (referer != null && !referer.isEmpty()) {
+            headers.put("Referer", referer);
+        }
         return headers;
     }
 
     private String fetch(String url) {
-        return OkHttp.string(url, getHeaders());
+        return OkHttp.string(url, getHeaders(url));
     }
 
     @Override
     public String homeContent(boolean filter) throws Exception {
+        // 【关键防爬绕过】：发起一次性会话切换握手，获取并保存合法的 Orientation 和 Session Cookie 到 OkHttp 的全局 CookieJar
+        try {
+            fetch(siteUrl + "/switch-sexual-orientation/straight/straight");
+        } catch (Exception ignored) {
+        }
+
         List<Class> classes = new ArrayList<>();
         classes.add(new Class("new", "Latest"));
         classes.add(new Class("best", "Best"));
@@ -60,11 +79,17 @@ public class XVideos extends Spider {
 
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
+        int page = parsePage(pg);
         String url = getCategoryUrl(tid, pg);
         String html = fetch(url);
-        int page = parsePage(pg);
-        int pageCount = parsePageCount(html, page);
-        return Result.get().page(page, pageCount, 24, pageCount * 24).vod(parseList(html)).string();
+
+        if (html == null || html.isEmpty()) {
+            return Result.get().page(page, page, 24, page * 24).vod(new ArrayList<>()).string();
+        }
+
+        Document doc = Jsoup.parse(html);
+        int pageCount = parsePageCount(doc, page);
+        return Result.get().page(page, pageCount, 24, pageCount * 24).vod(parseList(doc)).string();
     }
 
     @Override
@@ -98,7 +123,8 @@ public class XVideos extends Spider {
     public String searchContent(String key, boolean quick, String pg) throws Exception {
         int page = parsePage(pg);
         String url = siteUrl + "/?k=" + URLEncoder.encode(key, "UTF-8") + "&p=" + Math.max(0, page - 1);
-        return Result.get().vod(parseList(fetch(url))).string();
+        Document doc = Jsoup.parse(fetch(url));
+        return Result.get().vod(parseList(doc)).string();
     }
 
     @Override
@@ -107,14 +133,12 @@ public class XVideos extends Spider {
         String html = fetch(webUrl);
         String videoUrl = getPlayerUrl(html);
         if (videoUrl.isEmpty()) return "";
-        HashMap<String, String> headers = getHeaders();
-        headers.put("Referer", webUrl);
+        HashMap<String, String> headers = getHeaders(webUrl);
         return Result.get().url(videoUrl).header(headers).string();
     }
 
-    private List<Vod> parseList(String html) {
+    private List<Vod> parseList(Document doc) {
         List<Vod> list = new ArrayList<>();
-        Document doc = Jsoup.parse(html);
         for (Element div : doc.select("div.thumb-block")) {
             Element a = div.selectFirst("p.title a[href^='/video']");
             if (a == null) a = div.selectFirst(".title a[href^='/video']");
@@ -124,13 +148,19 @@ public class XVideos extends Spider {
             String id = fixUrl(a.attr("href").replace("/THUMBNUM/", "/0/"));
             String name = a.hasAttr("title") ? a.attr("title") : a.ownText();
             if (name.isEmpty()) name = a.text();
-            name = Jsoup.parse(name).text().trim();
+            name = name.trim();
             if (name.isEmpty()) continue;
 
             Element img = div.selectFirst("img[data-src], img[src]");
-            String pic = img == null ? "" : (img.hasAttr("data-src") ? img.attr("data-src") : img.attr("src"));
-            pic = pic.replace("THUMBNUM", "1");
-            if (pic.isEmpty()) pic = getDataVideoThumb(div.attr("data-video"));
+            String pic = "";
+            if (img != null) {
+                pic = img.hasAttr("data-src") ? img.attr("data-src") : img.attr("src");
+            }
+            if (pic != null && !pic.isEmpty()) {
+                pic = pic.replace("THUMBNUM", "1");
+            } else {
+                pic = getDataVideoThumb(div.attr("data-video"));
+            }
 
             String remark = div.selectFirst("span.duration") == null ? "" : div.selectFirst("span.duration").text();
             if (remark.isEmpty() && div.selectFirst(".duration") != null) remark = div.selectFirst(".duration").text();
@@ -162,28 +192,46 @@ public class XVideos extends Spider {
     }
 
     private String getPlayerVar(String html, String method) {
-        Matcher matcher = Pattern.compile("html5player\\." + method + "\\('([^']+)'\\)").matcher(html);
+        Matcher matcher = Pattern.compile("html5player\\." + method + "\\(['\"]([^'\"]+)['\"]\\)").matcher(html);
         return matcher.find() ? decodeJsString(matcher.group(1)) : "";
     }
 
     private String getActor(Document doc) {
-        String uploader = match(doc.html(), "html5player\\.setUploaderName\\('([^']+)'\\)");
-        if (uploader.isEmpty()) {
-            Element a = doc.selectFirst("a[href^=/profiles/], a[href^=/channels/], a[href^=/pornstars/], a[href^=/][class*=profile]");
-            if (a != null) uploader = a.text().trim();
+        String uploader = "";
+        String url = "";
+        Element a = doc.selectFirst("a[href^=/profiles/], a[href^=/channels/], a[href^=/pornstars/], a[href^=/][class*=profile]");
+        if (a != null) {
+            uploader = a.text().trim();
+            url = fixUrl(a.attr("href"));
+        } else {
+            uploader = match(doc.html(), "html5player\\.setUploaderName\\(['\"]([^'\"]+)['\"]\\)");
+            if (!uploader.isEmpty()) {
+                url = fixUrl("/profiles/" + uploader);
+            }
         }
         if (uploader.isEmpty()) return "";
-        String url = fixUrl("/" + uploader);
         return "[a=cr:" + new Gson().toJson(new Class(url, uploader)) + "/]" + uploader + "[/a]";
     }
 
     private String getCategoryUrl(String tid, String pg) {
         int page = parsePage(pg);
         int index = Math.max(0, page - 1);
-        if (tid.startsWith("http")) return tid + (tid.contains("?") ? "&" : "?") + "p=" + index;
-        if ("new".equals(tid)) return page <= 1 ? siteUrl + "/" : siteUrl + "/new/" + index;
-        if ("best".equals(tid)) return page <= 1 ? siteUrl + "/best" : siteUrl + "/best/" + getLastMonth() + "/" + index;
-        return siteUrl + "/tags/" + tid + "/" + index;
+        try {
+            if (tid.startsWith("http")) {
+                if (tid.contains("p=")) {
+                    return tid.replaceAll("([?&]p=)\\d+", "$1" + index);
+                } else {
+                    return tid + (tid.contains("?") ? "&" : "?") + "p=" + index;
+                }
+            }
+
+            String encodedTid = URLEncoder.encode(tid, "UTF-8");
+            if ("new".equals(tid)) return page <= 1 ? siteUrl + "/" : siteUrl + "/new/" + index;
+            if ("best".equals(tid)) return page <= 1 ? siteUrl + "/best" : siteUrl + "/best/" + getLastMonth() + "/" + index;
+            return siteUrl + "/tags/" + encodedTid + "/" + index;
+        } catch (Exception e) {
+            return siteUrl + "/tags/" + tid + "/" + index;
+        }
     }
 
     private String getLastMonth() {
@@ -200,9 +248,9 @@ public class XVideos extends Spider {
         }
     }
 
-    private int parsePageCount(String html, int page) {
+    private int parsePageCount(Document doc, int page) {
         int count = page;
-        Elements links = Jsoup.parse(html).select("div.pagination a[href], ul.pagination a[href], .pagination a[href]");
+        Elements links = doc.select("div.pagination a[href], ul.pagination a[href], .pagination a[href]");
         for (Element link : links) {
             String href = link.attr("href");
             Matcher matcher = PAGE_QUERY.matcher(href);
@@ -228,7 +276,14 @@ public class XVideos extends Spider {
 
     private String decodeJsString(String value) {
         try {
-            value = value.replace("\\/", "/").replace("\\u0026", "&");
+            value = value.replace("\\/", "/");
+            Matcher matcher = Pattern.compile("\\\\u([0-9a-fA-F]{4})").matcher(value);
+            StringBuffer sb = new StringBuffer();
+            while (matcher.find()) {
+                matcher.appendReplacement(sb, Character.toString((char) Integer.parseInt(matcher.group(1), 16)));
+            }
+            matcher.appendTail(sb);
+            value = sb.toString();
             return value.contains("%") ? URLDecoder.decode(value, "UTF-8") : value;
         } catch (Exception e) {
             return value;
