@@ -1,11 +1,12 @@
 package com.github.catvod.spider;
 
+import android.content.Context;
+
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
-import com.github.catvod.net.OkHttp;
-import com.github.catvod.utils.Util;
+import com.github.catvod.crawler.SpiderDebug;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -31,6 +32,13 @@ public class XVideos extends Spider {
     private static final Pattern PAGE_PATH = Pattern.compile("/(\\d+)(?:$|[?#])");
     private static final Pattern PAGE_QUERY = Pattern.compile("[?&]p=(\\d+)(?:$|&)");
 
+    private Context context;
+
+    @Override
+    public void init(Context context) throws Exception {
+        this.context = context;
+    }
+
     // 升级为完整的现代浏览器指纹头，包含 Client Hints，可绕过大多数 WAF 签名检测
     private HashMap<String, String> getHeaders(String referer) {
         HashMap<String, String> headers = new HashMap<>();
@@ -52,7 +60,12 @@ public class XVideos extends Spider {
     }
 
     private String fetch(String url) {
-        return OkHttp.string(url, getHeaders(url));
+        try {
+            return new WebViewSpider(context).getHtmlSource(url, getHeaders(siteUrl + "/"));
+        } catch (Exception e) {
+            SpiderDebug.log(e);
+            return "";
+        }
     }
 
     @Override
