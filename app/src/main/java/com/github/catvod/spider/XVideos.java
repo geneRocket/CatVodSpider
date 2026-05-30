@@ -57,11 +57,6 @@ public class XVideos extends Spider {
 
     @Override
     public String homeContent(boolean filter) throws Exception {
-        // 【关键防爬绕过】：发起一次性会话切换握手，获取并保存合法的 Orientation 和 Session Cookie 到 OkHttp 的全局 CookieJar
-        try {
-            fetch(siteUrl + "/switch-sexual-orientation/straight/straight");
-        } catch (Exception ignored) {
-        }
 
         List<Class> classes = new ArrayList<>();
         classes.add(new Class("new", "Latest"));
