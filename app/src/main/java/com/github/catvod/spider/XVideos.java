@@ -7,6 +7,7 @@ import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
+import com.github.catvod.net.OkHttp;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -31,6 +32,7 @@ public class XVideos extends Spider {
     private static final String siteUrl = "https://www.xvideos.com";
     private static final Pattern PAGE_PATH = Pattern.compile("/(\\d+)(?:$|[?#])");
     private static final Pattern PAGE_QUERY = Pattern.compile("[?&]p=(\\d+)(?:$|&)");
+    private static final int CATEGORY_RETRY = 3;
 
     private Context context;
 
@@ -61,10 +63,12 @@ public class XVideos extends Spider {
 
     private String fetch(String url) {
         try {
-            return new WebViewSpider(context).getHtmlSource(url, getHeaders(siteUrl + "/"));
+            if (context == null) return OkHttp.string(url, getHeaders(siteUrl + "/"));
+            String html = new WebViewSpider(context).getHtmlSource(url, getHeaders(siteUrl + "/"));
+            return html == null || html.isEmpty() ? OkHttp.string(url, getHeaders(siteUrl + "/")) : html;
         } catch (Exception e) {
             SpiderDebug.log(e);
-            return "";
+            return OkHttp.string(url, getHeaders(siteUrl + "/"));
         }
     }
 
@@ -89,15 +93,33 @@ public class XVideos extends Spider {
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         int page = parsePage(pg);
         String url = getCategoryUrl(tid, pg);
-        String html = fetch(url);
+        Document doc = fetchCategory(url);
+        if (doc == null) return Result.get().page(page, page, 24, page * 24).vod(new ArrayList<>()).string();
 
-        if (html == null || html.isEmpty()) {
-            return Result.get().page(page, page, 24, page * 24).vod(new ArrayList<>()).string();
-        }
-
-        Document doc = Jsoup.parse(html);
+        List<Vod> list = parseList(doc);
         int pageCount = parsePageCount(doc, page);
-        return Result.get().page(page, pageCount, 24, pageCount * 24).vod(parseList(doc)).string();
+        return Result.get().page(page, pageCount, 24, pageCount * 24).vod(list).string();
+    }
+
+    private Document fetchCategory(String url) {
+        Document last = null;
+        for (int i = 0; i < CATEGORY_RETRY; i++) {
+            String html = fetch(url);
+            if (html != null && !html.isEmpty()) {
+                last = Jsoup.parse(html);
+                if (!parseList(last).isEmpty()) return last;
+            }
+            sleep(800 + i * 500);
+        }
+        return last;
+    }
+
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override
@@ -192,11 +214,11 @@ public class XVideos extends Spider {
     }
 
     private String getPlayerUrl(String html) {
-        String hls = getPlayerVar(html, "setVideoHLS");
-        if (!hls.isEmpty()) return hls;
         String high = getPlayerVar(html, "setVideoUrlHigh");
         if (!high.isEmpty()) return high;
-        return getPlayerVar(html, "setVideoUrlLow");
+        String low = getPlayerVar(html, "setVideoUrlLow");
+        if (!low.isEmpty()) return low;
+        return getPlayerVar(html, "setVideoHLS");
     }
 
     private String getPlayerVar(String html, String method) {

@@ -21,6 +21,7 @@ import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -128,9 +129,9 @@ public class MissAV extends Spider {
         String webUrl = ids.get(0);
         Vod vod = new Vod();
         vod.setVodId(webUrl);
+        JXDocument doc = JXDocument.create(fetch(webUrl));
         vod.setVodPlayFrom("MissAV");
         vod.setVodPlayUrl(webUrl);
-        JXDocument doc = JXDocument.create(fetch(webUrl));
         String code = doc.selNOne("//span[text()='番号:']/../span[2]/text()") + "";
         String intro = doc.selNOne("//div[@class='mb-1 text-secondary break-all line-clamp-2']/text()") + "";
         vod.setVodRemarks(code);
@@ -179,10 +180,19 @@ public class MissAV extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
+        String webUrl = id;
+        String directUrl = parseVideoUrl(fetch(webUrl));
+        if (!TextUtils.isEmpty(directUrl)) {
+            HashMap<String, String> headers = getHeaders();
+            headers.put("Referer", webUrl);
+            headers.put("Origin", siteUrl);
+            return Result.get().url(directUrl).header(headers).string();
+        }
+        if (context == null) return "";
+
         WebViewVIdeoUrlSpider webViewVIdeoUrlSpider = new WebViewVIdeoUrlSpider(context);
         String script = "document.getElementsByClassName('plyr__control plyr__control--overlaid')[0].click()";
         Pattern sniffer = Pattern.compile("http((?!http).){12,}?\\.(m3u8)\\?.*|http((?!http).){12,}\\.(m3u8)");
-        String webUrl = id;
         String videoUrl = webViewVIdeoUrlSpider.getVideoUrl(webUrl, getHeaders(), script, sniffer);
         if (TextUtils.isEmpty(videoUrl)) return "";
         HashMap<String, String> headers = getHeaders();
@@ -190,5 +200,27 @@ public class MissAV extends Spider {
         headers.put("Referer", webUrl);
         headers.put("Origin", siteUrl);
         return Result.get().url(videoUrl).header(headers).string();
+    }
+
+    private String parseVideoUrl(String html) {
+        if (TextUtils.isEmpty(html)) return "";
+        Matcher matcher = Pattern.compile("https?://[^'\"\\\\]+\\.m3u8(?:\\?[^'\"\\\\]*)?").matcher(html);
+        if (matcher.find()) return matcher.group();
+        matcher = Pattern.compile("eval\\(function\\(p,a,c,k,e,d\\).*?\\('(.+?)',\\s*(\\d+),\\s*(\\d+),\\s*'([^']*)'\\.split\\('\\|'\\)", Pattern.DOTALL).matcher(html);
+        while (matcher.find()) {
+            String decoded = unpack(matcher.group(1), Integer.parseInt(matcher.group(2)), Integer.parseInt(matcher.group(3)), matcher.group(4).split("\\|", -1));
+            Matcher url = Pattern.compile("https?://[^'\"\\\\]+\\.m3u8(?:\\?[^'\"\\\\]*)?").matcher(decoded);
+            if (url.find()) return url.group();
+        }
+        return "";
+    }
+
+    private String unpack(String packed, int radix, int count, String[] keys) {
+        packed = packed.replace("\\'", "'").replace("\\\\", "\\");
+        for (int i = count - 1; i >= 0; i--) {
+            if (i >= keys.length || TextUtils.isEmpty(keys[i])) continue;
+            packed = packed.replaceAll("\\b" + Integer.toString(i, radix) + "\\b", Matcher.quoteReplacement(keys[i]));
+        }
+        return packed;
     }
 }
