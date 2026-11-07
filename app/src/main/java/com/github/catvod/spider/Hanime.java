@@ -1,5 +1,6 @@
 package com.github.catvod.spider;
 
+import android.content.Context;
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Filter;
 import com.github.catvod.bean.Result;
@@ -17,10 +18,20 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.net.URLEncoder;
 
 public class Hanime extends Spider {
 
     private static final String siteUrl = "https://hanime1.me";
+    private Context context;
+    private final CloudflareHtml browser = new CloudflareHtml();
+
+    @Override
+    public void init(Context context) { this.context = context; }
+
+    private Document fetch(String url) {
+        return browser.fetch(context, url, getHeaders());
+    }
 
     private HashMap<String, String> getHeaders() {
         HashMap<String, String> headers = new HashMap<>();
@@ -43,10 +54,10 @@ public class Hanime extends Spider {
         List<Vod> list = new ArrayList<>();
         List<Class> classes = new ArrayList<>();
         LinkedHashMap<String, List<Filter>> filters = new LinkedHashMap<>();
-        Document doc1 = Jsoup.parse(OkHttp.string(siteUrl.concat("/search?genre=裏番"), getHeaders()));
+        Document doc1 = fetch(siteUrl.concat("/search?genre=裏番"));
         List<String> sorts = doc1.select("div.hentai-sort-options-wrapper").eachText();
-        List<String> years = doc1.getElementById("year").select("option").eachAttr("value");
-        Document doc2 = Jsoup.parse(OkHttp.string(siteUrl, getHeaders()));
+        List<String> years = doc1.select("#year option").eachAttr("value");
+        Document doc2 = fetch(siteUrl);
         for (Element element : doc2.select("a.nav-item")) {
             String text = element.text();
             if (text.equals("新番預告") || text.equals("H漫畫")) continue;
@@ -75,12 +86,13 @@ public class Hanime extends Spider {
         if (extend.get("by") == null) extend.put("by", "最新上市");
         if (extend.get("year") == null) extend.put("year", "");
         String target = siteUrl.concat("/search?genre=").concat(tid).concat("&page=").concat(pg).concat("&sort=").concat(extend.get("by")).concat("&year=").concat(extend.get("year"));
-        Document doc = Jsoup.parse(OkHttp.string(target, getHeaders()));
+        Document doc = fetch(target);
         for (Element element : doc.select("div.col-xs-6")) {
-            String pic = element.select("img").get(1).attr("src");
+            String pic = element.select("img").attr("src");
             String url = element.select("a.overlay").attr("href");
             String name = element.select("div.card-mobile-title").text();
-            String id = url.split("=")[1];
+            if (!url.contains("=")) continue;
+            String id = url.substring(url.lastIndexOf('=') + 1);
             list.add(new Vod(id, name, pic));
         }
         if (list.isEmpty()) {
@@ -95,16 +107,18 @@ public class Hanime extends Spider {
                 }
             }
         }
-        return Result.string(list);
+        return Result.get().vod(list).string();
     }
 
     @Override
     public String detailContent(List<String> ids) throws Exception {
-        Document doc = Jsoup.parse(OkHttp.string(siteUrl.concat("/watch?v=").concat(ids.get(0)), getHeaders()));
-        String name = doc.getElementById("shareBtn-title").text();
-        JSONObject json = new JSONObject(doc.select("script[type=application/ld+json]").html().trim());
+        Document doc = fetch(siteUrl.concat("/watch?v=").concat(ids.get(0)));
+        String name = doc.select("#shareBtn-title").text();
+        String metadata = doc.select("script[type=application/ld+json]").html().trim();
+        if (metadata.isEmpty()) return Result.get().vod(new ArrayList<Vod>()).string();
+        JSONObject json = new JSONObject(metadata);
         String content = json.optString("description");
-        String pic = json.optJSONArray("thumbnailUrl").optString(0);
+        String pic = json.optJSONArray("thumbnailUrl") == null ? "" : json.optJSONArray("thumbnailUrl").optString(0);
         String url = json.optString("contentUrl");;
         Vod vod = new Vod();
         vod.setVodId(ids.get(0));
@@ -119,20 +133,28 @@ public class Hanime extends Spider {
     @Override
     public String searchContent(String key, boolean quick) throws Exception {
         List<Vod> list = new ArrayList<>();
-        String target = siteUrl.concat("/search?query=").concat(key).concat("&genre=&sort=&year=&month=&duration=");
-        Document doc = Jsoup.parse(OkHttp.string(target, getHeaders()));
+        String target = siteUrl.concat("/search?query=").concat(URLEncoder.encode(key, "UTF-8")).concat("&genre=&sort=&year=&month=&duration=");
+        Document doc = fetch(target);
         for (Element element : doc.select("div.col-xs-6")) {
-            String pic = element.select("img").get(1).attr("src");
+            String pic = element.select("img").attr("src");
             String url = element.select("a.overlay").attr("href");
             String name = element.select("div.card-mobile-title").text();
-            String id = url.split("=")[1];
+            if (!url.contains("=")) continue;
+            String id = url.substring(url.lastIndexOf('=') + 1);
             list.add(new Vod(id, name, pic));
         }
-        return Result.string(list);
+        return Result.get().vod(list).string();
+    }
+
+    @Override
+    public String searchContent(String key, boolean quick, String pg) throws Exception {
+        return "1".equals(pg) ? searchContent(key, quick) : Result.get().vod(new ArrayList<Vod>()).string();
     }
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        return Result.get().url(id).header(getHeaders()).string();
+        HashMap<String, String> headers = getHeaders();
+        headers.put("Referer", siteUrl + "/");
+        return Result.get().url(id).header(headers).string();
     }
 }

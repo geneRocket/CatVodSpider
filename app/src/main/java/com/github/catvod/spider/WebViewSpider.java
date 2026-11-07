@@ -39,6 +39,9 @@ public class WebViewSpider {
     Map<String, String> webHeaders = new HashMap<>();
 
     Handler mainHandler;
+    private boolean nativeNetwork;
+    private long deadline;
+    private boolean closed;
 
 
     public WebViewSpider(Context context) {
@@ -50,6 +53,7 @@ public class WebViewSpider {
         webView = new WebView(context);
         // 启用 JS
         WebSettings settings = webView.getSettings();
+        if (webHeaders.containsKey("User-Agent")) settings.setUserAgentString(webHeaders.get("User-Agent"));
         settings.setSupportZoom(true);
         settings.setUseWideViewPort(true);
         settings.setDatabaseEnabled(false);
@@ -73,6 +77,7 @@ public class WebViewSpider {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
+                if (nativeNetwork) return null;
                 try {
                     if (url.equals(webUrl)) {
                         webHeaders.clear();
@@ -151,7 +156,8 @@ public class WebViewSpider {
                 putCookie(url);
                 putCookie(webUrl);
                 execJsGetSource(false, () -> {
-                    latch.countDown();
+                    if (nativeNetwork) waitForContent();
+                    else latch.countDown();
                 });
             }
         });
@@ -165,9 +171,10 @@ public class WebViewSpider {
             webView.evaluateJavascript(
                     "(function() { return document.documentElement.outerHTML; })();",
                     html -> {
-
+                        if (closed) { latch.countDown(); return; }
                         htmlSource = StringEscapeUtils.unescapeEcmaScript(html);
-                        htmlSource = htmlSource.substring(1, htmlSource.length() - 1);
+                        htmlSource = htmlSource == null || htmlSource.length() < 2 || htmlSource.equals("null")
+                                ? "" : htmlSource.substring(1, htmlSource.length() - 1);
                         latch.countDown();
                         if (callBack != null) {
                             callBack.run();
@@ -186,6 +193,27 @@ public class WebViewSpider {
 
 
     public String getHtmlSource(String webUrl, Map<String, String> header) throws Exception {
+        return getHtmlSource(webUrl, header, false);
+    }
+
+    private void waitForContent() {
+        if (closed || latch.getCount() == 0) return;
+        if (!CloudflareHtml.isChallenge(htmlSource) && !htmlSource.isEmpty()) {
+            putCookie(webUrl);
+            latch.countDown();
+        } else if (System.currentTimeMillis() < deadline) {
+            mainHandler.postDelayed(() -> execJsGetSource(false, this::waitForContent), 500);
+        } else {
+            latch.countDown();
+        }
+    }
+
+    public String getHtmlSource(String webUrl, Map<String, String> header, boolean nativeNetwork) throws Exception {
+        if (context == null) return "";
+        if (Looper.myLooper() == Looper.getMainLooper()) throw new IllegalStateException("WebView fetch requires a worker thread");
+        this.nativeNetwork = nativeNetwork;
+        this.closed = false;
+        deadline = System.currentTimeMillis() + 25000;
 
         this.webUrl = webUrl;
         this.htmlSource = "";
@@ -198,23 +226,25 @@ public class WebViewSpider {
             webView.loadUrl(webUrl, header);
         });
         // 加载目标网页
-        if (!latch.await(5, TimeUnit.SECONDS)) {
-            execJsGetSource(true, null);
+        try {
+            if (!latch.await(nativeNetwork ? 25 : 5, TimeUnit.SECONDS) && !nativeNetwork) {
+                execJsGetSource(true, null);
+            }
+            return htmlSource;
+        } finally {
+            mainHandler.post(() -> {
+                closed = true;
+                mainHandler.removeCallbacksAndMessages(null);
+                if (webView != null) webView.destroy();
+            });
         }
-
-        mainHandler.post(() -> {
-            webView.destroy();
-        });
-
-        return htmlSource;
     }
 
     private void putCookie(String url) {
         if (url == null || url.isEmpty()) return;
         String cookie = CookieManager.getInstance().getCookie(url);
         if (cookie == null || cookie.isEmpty()) return;
-        String old = webHeaders.get("Cookie");
-        webHeaders.put("Cookie", old == null || old.isEmpty() ? cookie : old + "; " + cookie);
+        webHeaders.put("Cookie", cookie);
     }
 
     public Map<String, String> getHeaders() {

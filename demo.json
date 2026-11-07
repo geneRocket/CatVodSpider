@@ -62,6 +62,42 @@
         "type": "rect",
         "ratio": 1.5
       }
+    },
+    {
+      "key": "Jable",
+      "name": "Jable",
+      "type": 3,
+      "api": "csp_Jable",
+      "searchable": 1,
+      "changeable": 0,
+      "style": { "type": "rect", "ratio": 1.5 }
+    },
+    {
+      "key": "Hanime",
+      "name": "Hanime1",
+      "type": 3,
+      "api": "csp_Hanime",
+      "searchable": 1,
+      "changeable": 0,
+      "style": { "type": "rect", "ratio": 1.5 }
+    },
+    {
+      "key": "Eighteen",
+      "name": "18AV",
+      "type": 3,
+      "api": "csp_Eighteen",
+      "searchable": 1,
+      "changeable": 0,
+      "style": { "type": "rect", "ratio": 1.5 }
+    },
+    {
+      "key": "XHamster",
+      "name": "XHamster",
+      "type": 3,
+      "api": "csp_XHamster",
+      "searchable": 1,
+      "changeable": 0,
+      "style": { "type": "rect", "ratio": 1.5 }
     }
   ],
   "doh": [

@@ -1,5 +1,6 @@
 package com.github.catvod.spider;
 
+import android.content.Context;
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
@@ -23,6 +24,31 @@ public class Jable extends Spider {
     private static final String cateUrl = siteUrl + "/categories/";
     private static final String detailUrl = siteUrl + "/videos/";
     private static final String searchUrl = siteUrl + "/search/";
+    private Context context;
+    private final CloudflareHtml browser = new CloudflareHtml();
+
+    @Override
+    public void init(Context context) {
+        this.context = context;
+    }
+
+    private Document fetch(String url) {
+        return browser.fetch(context, url, getHeaders());
+    }
+
+    private List<Vod> videos(Document doc) {
+        List<Vod> list = new ArrayList<>();
+        for (Element element : doc.select("div.video-img-box")) {
+            Element link = element.selectFirst("a[href*=/videos/]");
+            if (link == null) continue;
+            String id = link.absUrl("href").replaceFirst(".*/videos/([^/?#]+).*", "$1");
+            String name = element.select("div.detail > h6").text();
+            Element img = element.selectFirst("img");
+            String pic = img == null ? "" : img.hasAttr("data-src") ? img.absUrl("data-src") : img.absUrl("src");
+            if (!id.isEmpty() && !name.isEmpty()) list.add(new Vod(id, name, pic));
+        }
+        return list;
+    }
 
     private HashMap<String, String> getHeaders() {
         HashMap<String, String> headers = new HashMap<>();
@@ -34,21 +60,13 @@ public class Jable extends Spider {
     public String homeContent(boolean filter) throws Exception {
         List<Vod> list = new ArrayList<>();
         List<Class> classes = new ArrayList<>();
-        Document doc = Jsoup.parse(OkHttp.string(cateUrl, getHeaders()));
+        Document doc = fetch(cateUrl);
         for (Element element : doc.select("div.img-box > a")) {
-            String typeId = element.attr("href").split("/")[4];
+            String typeId = element.absUrl("href").replaceFirst(".*/categories/([^/?#]+).*", "$1");
             String typeName = element.select("div.absolute-center > h4").text();
-            classes.add(new Class(typeId, typeName));
+            if (!typeId.isEmpty() && !typeName.isEmpty()) classes.add(new Class(typeId, typeName));
         }
-        doc = Jsoup.parse(OkHttp.string(siteUrl, getHeaders()));
-        for (Element element : doc.select("div.video-img-box")) {
-            String pic = element.select("img").attr("data-src");
-            String url = element.select("a").attr("href");
-            String name = element.select("div.detail > h6").text();
-            if (pic.endsWith(".gif") || name.isEmpty()) continue;
-            String id = url.split("/")[4];
-            list.add(new Vod(id, name, pic));
-        }
+        list.addAll(videos(fetch(siteUrl)));
         return Result.string(classes, list);
     }
 
@@ -56,49 +74,46 @@ public class Jable extends Spider {
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         List<Vod> list = new ArrayList<>();
         String target = cateUrl + tid + "/?mode=async&function=get_block&block_id=list_videos_common_videos_list&sort_by=post_date&from=" + String.format(Locale.getDefault(), "%02d", Integer.parseInt(pg)) + "&_=" + System.currentTimeMillis();
-        Document doc = Jsoup.parse(OkHttp.string(target, getHeaders()));
-        for (Element element : doc.select("div.video-img-box")) {
-            String pic = element.select("img").attr("data-src");
-            String url = element.select("a").attr("href");
-            String name = element.select("div.detail > h6").text();
-            String id = url.split("/")[4];
-            list.add(new Vod(id, name, pic));
-        }
-        return Result.string(list);
+        Document doc = fetch(target);
+        list.addAll(videos(doc));
+        return Result.get().vod(list).string();
     }
 
     @Override
     public String detailContent(List<String> ids) throws Exception {
-        Document doc = Jsoup.parse(OkHttp.string(detailUrl.concat(ids.get(0)).concat("/"), getHeaders()));
+        Document doc = fetch(detailUrl.concat(ids.get(0)).concat("/"));
+        String hlsUrl = Util.getVar(doc.html(), "hlsUrl");
+        if (hlsUrl.isEmpty()) return Result.error("播放地址无法解析");
         String name = doc.select("meta[property=og:title]").attr("content");
         String pic = doc.select("meta[property=og:image]").attr("content");
-        String year = doc.select("span.inactive-color").get(0).text();
+        String year = doc.select("span.inactive-color").text();
         Vod vod = new Vod();
         vod.setVodId(ids.get(0));
         vod.setVodPic(pic);
         vod.setVodYear(year.replace("上市於 ", ""));
         vod.setVodName(name);
         vod.setVodPlayFrom("Jable");
-        vod.setVodPlayUrl("播放$" + Util.getVar(doc.html(), "hlsUrl"));
+        vod.setVodPlayUrl("播放$" + hlsUrl);
         return Result.string(vod);
     }
 
     @Override
     public String searchContent(String key, boolean quick) throws Exception {
         List<Vod> list = new ArrayList<>();
-        Document doc = Jsoup.parse(OkHttp.string(searchUrl.concat(URLEncoder.encode(key)).concat("/"), getHeaders()));
-        for (Element element : doc.select("div.video-img-box")) {
-            String pic = element.select("img").attr("data-src");
-            String url = element.select("a").attr("href");
-            String name = element.select("div.detail > h6").text();
-            String id = url.split("/")[4];
-            list.add(new Vod(id, name, pic));
-        }
-        return Result.string(list);
+        Document doc = fetch(searchUrl.concat(URLEncoder.encode(key, "UTF-8")).concat("/"));
+        list.addAll(videos(doc));
+        return Result.get().vod(list).string();
+    }
+
+    @Override
+    public String searchContent(String key, boolean quick, String pg) throws Exception {
+        return "1".equals(pg) ? searchContent(key, quick) : Result.get().vod(new ArrayList<Vod>()).string();
     }
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        return Result.get().url(id).header(getHeaders()).string();
+        HashMap<String, String> headers = getHeaders();
+        headers.put("Referer", siteUrl + "/");
+        return Result.get().url(id).header(headers).string();
     }
 }

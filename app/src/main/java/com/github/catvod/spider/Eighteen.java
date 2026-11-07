@@ -18,11 +18,13 @@ import java.util.List;
 
 public class Eighteen extends Spider {
 
-    private final String url = "https://mjv002.com/zh/";
+    private String url = "https://mjv002.com/zh/";
 
     @Override
     public void init(Context context, String extend) throws Exception {
-        OkHttp.newCall("https://mjv002.com/zh/chinese_IamOverEighteenYearsOld/19/index.html").close();
+        if (extend != null && extend.startsWith("https://")) url = extend.replaceAll("/+$", "") + "/";
+        try { OkHttp.newCall(url + "chinese_IamOverEighteenYearsOld/19/index.html").close(); }
+        catch (Exception ignored) { }
     }
 
     @Override
@@ -60,13 +62,14 @@ public class Eighteen extends Spider {
             String remark = div.select("div.meta").text();
             list.add(new Vod(id, name, pic, remark));
         }
-        return Result.string(list);
+        return Result.get().vod(list).string();
     }
 
     @Override
     public String detailContent(List<String> ids) throws Exception {
         Document doc = Jsoup.parse(OkHttp.string(url + ids.get(0)));
-        Element wrap = doc.select("div.video-wrap").get(0);
+        Element wrap = doc.selectFirst("div.video-wrap");
+        if (wrap == null) return Result.get().vod(new ArrayList<Vod>()).string();
         String name = wrap.select("div.archive-title > h1").text();
         String pic = wrap.select("div.player-wrap > img").attr("src");
         Vod vod = new Vod();
@@ -117,6 +120,6 @@ public class Eighteen extends Spider {
             String remark = div.select("div.meta").text();
             list.add(new Vod(id, name, pic, remark));
         }
-        return Result.string(list);
+        return Result.get().vod(list).string();
     }
 }
