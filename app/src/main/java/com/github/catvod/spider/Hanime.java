@@ -23,6 +23,7 @@ import java.net.URLEncoder;
 public class Hanime extends Spider {
 
     private static final String siteUrl = "https://hanime1.me";
+    private static final String UNAVAILABLE = "Hanime1 暂时无法访问或被 Cloudflare 拦截";
     private Context context;
     private final CloudflareHtml browser = new CloudflareHtml();
 
@@ -31,6 +32,10 @@ public class Hanime extends Spider {
 
     private Document fetch(String url) {
         return browser.fetch(context, url, getHeaders());
+    }
+
+    private boolean isUnavailable(Document doc) {
+        return doc.body().childrenSize() == 0 || CloudflareHtml.isChallenge(doc.html());
     }
 
     private HashMap<String, String> getHeaders() {
@@ -54,10 +59,11 @@ public class Hanime extends Spider {
         List<Vod> list = new ArrayList<>();
         List<Class> classes = new ArrayList<>();
         LinkedHashMap<String, List<Filter>> filters = new LinkedHashMap<>();
+        Document doc2 = fetch(siteUrl);
+        if (isUnavailable(doc2)) return Result.error(UNAVAILABLE);
         Document doc1 = fetch(siteUrl.concat("/search?genre=裏番"));
         List<String> sorts = doc1.select("div.hentai-sort-options-wrapper").eachText();
         List<String> years = doc1.select("#year option").eachAttr("value");
-        Document doc2 = fetch(siteUrl);
         for (Element element : doc2.select("a.nav-item")) {
             String text = element.text();
             if (text.equals("新番預告") || text.equals("H漫畫")) continue;
@@ -87,6 +93,7 @@ public class Hanime extends Spider {
         if (extend.get("year") == null) extend.put("year", "");
         String target = siteUrl.concat("/search?genre=").concat(tid).concat("&page=").concat(pg).concat("&sort=").concat(extend.get("by")).concat("&year=").concat(extend.get("year"));
         Document doc = fetch(target);
+        if (isUnavailable(doc)) return Result.error(UNAVAILABLE);
         for (Element element : doc.select("div.col-xs-6")) {
             String pic = element.select("img").attr("src");
             String url = element.select("a.overlay").attr("href");
@@ -113,13 +120,15 @@ public class Hanime extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         Document doc = fetch(siteUrl.concat("/watch?v=").concat(ids.get(0)));
+        if (isUnavailable(doc)) return Result.error(UNAVAILABLE);
         String name = doc.select("#shareBtn-title").text();
         String metadata = doc.select("script[type=application/ld+json]").html().trim();
         if (metadata.isEmpty()) return Result.get().vod(new ArrayList<Vod>()).string();
         JSONObject json = new JSONObject(metadata);
         String content = json.optString("description");
         String pic = json.optJSONArray("thumbnailUrl") == null ? "" : json.optJSONArray("thumbnailUrl").optString(0);
-        String url = json.optString("contentUrl");;
+        String url = json.optString("contentUrl");
+        if (url.isEmpty()) return Result.error("Hanime1 播放地址无法解析");
         Vod vod = new Vod();
         vod.setVodId(ids.get(0));
         vod.setVodPic(pic);
@@ -135,6 +144,7 @@ public class Hanime extends Spider {
         List<Vod> list = new ArrayList<>();
         String target = siteUrl.concat("/search?query=").concat(URLEncoder.encode(key, "UTF-8")).concat("&genre=&sort=&year=&month=&duration=");
         Document doc = fetch(target);
+        if (isUnavailable(doc)) return Result.error(UNAVAILABLE);
         for (Element element : doc.select("div.col-xs-6")) {
             String pic = element.select("img").attr("src");
             String url = element.select("a.overlay").attr("href");

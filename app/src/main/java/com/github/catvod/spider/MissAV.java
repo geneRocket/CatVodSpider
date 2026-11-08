@@ -14,6 +14,8 @@ import com.github.catvod.net.OkHttp;
 import com.google.gson.Gson;
 
 import org.apache.commons.lang3.StringUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.seimicrawler.xpath.JXDocument;
 import org.seimicrawler.xpath.JXNode;
 
@@ -129,9 +131,13 @@ public class MissAV extends Spider {
         String webUrl = ids.get(0);
         Vod vod = new Vod();
         vod.setVodId(webUrl);
-        JXDocument doc = JXDocument.create(fetch(webUrl));
+        String html = fetch(webUrl);
+        Document page = Jsoup.parse(html, webUrl);
+        vod.setVodName(page.select("meta[property=og:title]").attr("content"));
+        vod.setVodPic(page.select("meta[property=og:image]").attr("abs:content"));
+        JXDocument doc = JXDocument.create(html);
         vod.setVodPlayFrom("MissAV");
-        vod.setVodPlayUrl(webUrl);
+        vod.setVodPlayUrl("播放$" + webUrl);
         String code = doc.selNOne("//span[text()='番号:']/../span[2]/text()") + "";
         String intro = doc.selNOne("//div[@class='mb-1 text-secondary break-all line-clamp-2']/text()") + "";
         vod.setVodRemarks(code);
